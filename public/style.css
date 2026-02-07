@@ -635,9 +635,9 @@ input:focus, select:focus, textarea:focus {
 .programs { background: var(--white); }
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
 .pricing-card {
   background: var(--white);
@@ -647,6 +647,10 @@ input:focus, select:focus, textarea:focus {
   transition: var(--transition);
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  grid-column: span 2;
 }
 .pricing-card:hover {
   transform: translateY(-6px);
@@ -741,6 +745,15 @@ input:focus, select:focus, textarea:focus {
   color: var(--primary);
   font-weight: 600;
   font-size: 0.8rem;
+}
+.pricing-card .btn {
+  margin-top: auto;
+}
+.pricing-grid > .pricing-card:nth-child(4):nth-last-child(2) {
+  grid-column: 2 / span 2;
+}
+.pricing-grid > .pricing-card:nth-child(5):last-child {
+  grid-column: 4 / span 2;
 }
 
 /* ===== Testimonials ===== */
@@ -1280,6 +1293,9 @@ select {
   .services-grid { grid-template-columns: repeat(2, 1fr); }
   .individual-grid { grid-template-columns: repeat(2, 1fr); }
   .pricing-grid { grid-template-columns: repeat(2, 1fr); }
+  .pricing-card { grid-column: auto; }
+  .pricing-grid > .pricing-card:nth-child(4):nth-last-child(2),
+  .pricing-grid > .pricing-card:nth-child(5):last-child { grid-column: auto; }
   .testimonials-grid { grid-template-columns: 1fr; max-width: 600px; margin: 0 auto; }
   .contact-grid { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
