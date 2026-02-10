@@ -4,6 +4,18 @@ let authToken = null;
 let currentPayment = null;
 let currentLang = localStorage.getItem('kvantum_lang') || 'en';
 
+// Use external API in static hosting (GitHub Pages) via public/config.js
+const API_BASE_URL = (window.KVANTUM_API_BASE_URL || '').trim().replace(/\/$/, '');
+
+function buildApiUrl(path) {
+  const normalizedPath = path.startsWith('/') ? path : '/' + path;
+  return API_BASE_URL ? API_BASE_URL + normalizedPath : normalizedPath;
+}
+
+function apiFetch(path, options) {
+  return fetch(buildApiUrl(path), options);
+}
+
 // ===== Translations =====
 const translations = {
   ru: {
@@ -415,7 +427,7 @@ async function handleLogin(e) {
   };
 
   try {
-    const res = await fetch('/api/login', {
+    const res = await apiFetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -450,7 +462,7 @@ async function handleRegister(e) {
   };
 
   try {
-    const res = await fetch('/api/register', {
+    const res = await apiFetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -543,7 +555,7 @@ async function handleConsultation(e) {
   };
 
   try {
-    const res = await fetch('/api/book-consultation', {
+    const res = await apiFetch('/api/book-consultation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -579,7 +591,7 @@ async function handleContact(e) {
   };
 
   try {
-    const res = await fetch('/api/book-consultation', {
+    const res = await apiFetch('/api/book-consultation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
@@ -634,7 +646,7 @@ async function handlePayment(e) {
   payBtn.disabled = true;
 
   try {
-    const res = await fetch('/api/payment', {
+    const res = await apiFetch('/api/payment', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -647,7 +659,7 @@ async function handlePayment(e) {
     if (res.ok) {
       closeModal('paymentModal');
 
-      await fetch('/api/notify', {
+      await apiFetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -703,7 +715,7 @@ async function sendChatMessage(e) {
   const typingId = showTyping();
 
   try {
-    const res = await fetch('/api/chat', {
+    const res = await apiFetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message })

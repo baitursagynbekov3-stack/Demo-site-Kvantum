@@ -7,6 +7,21 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'kvantum-secret-key-change-in-production';
+const SERVE_STATIC = process.env.SERVE_STATIC !== 'false';
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  }
+};
 
 // In-memory storage (replace with database in production)
 const users = [];
@@ -14,9 +29,17 @@ const bookings = [];
 const payments = [];
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+if (SERVE_STATIC) {
+  app.use(express.static(path.join(__dirname, 'public')));
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true });
+});
 
 // Auth middleware
 function authenticateToken(req, res, next) {
@@ -35,12 +58,13 @@ function authenticateToken(req, res, next) {
 app.post('/api/register', async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
+    const normalizedEmail = (email || '').trim().toLowerCase();
 
-    if (!name || !email || !password) {
+    if (!name || !normalizedEmail || !password) {
       return res.status(400).json({ error: 'All fields are required' });
     }
 
-    if (users.find(u => u.email === email)) {
+    if (users.find(u => u.email === normalizedEmail)) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
@@ -48,7 +72,7 @@ app.post('/api/register', async (req, res) => {
     const user = {
       id: users.length + 1,
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       phone: phone || '',
       createdAt: new Date()
@@ -71,8 +95,9 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password } = req.body;
+    const normalizedEmail = (email || '').trim().toLowerCase();
 
-    const user = users.find(u => u.email === email);
+    const user = users.find(u => u.email === normalizedEmail);
     if (!user) {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
@@ -211,11 +236,18 @@ app.post('/api/notify', (req, res) => {
   }
 });
 
-// Serve main page for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+if (SERVE_STATIC) {
+  // Serve main page for all other routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`KVANTUM server running at http://localhost:${PORT}`);
+  if (ALLOWED_ORIGINS.length) {
+    console.log(`CORS enabled for: ${ALLOWED_ORIGINS.join(', ')}`);
+  } else {
+    console.log('CORS enabled for all origins (ALLOWED_ORIGINS is empty)');
+  }
 });
