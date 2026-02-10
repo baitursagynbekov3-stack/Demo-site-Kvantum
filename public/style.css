@@ -1282,7 +1282,19 @@ select {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ===== Responsive ===== */
+@media (max-width: 1200px) {
+  .nav-links { gap: 20px; }
+  .nav-actions { gap: 8px; }
+  .nav-actions .btn { padding: 8px 16px; font-size: 0.8rem; }
+}
 @media (max-width: 1024px) {
+  .nav-links { gap: 16px; }
+  .nav-links a { font-size: 0.85rem; }
+  .nav-actions .btn { padding: 8px 14px; font-size: 0.78rem; }
+  .btn-lang { width: 34px; height: 34px; }
+  .lang-flag { font-size: 0.65rem; }
+  .hero-buttons { gap: 12px; }
+  .hero-buttons .btn { padding: 14px 28px; font-size: 0.9rem; }
   .about-layout { grid-template-columns: 1fr; gap: 48px; }
   .about-left { max-width: 400px; margin: 0 auto; }
   .about-right .section-label,
@@ -1323,20 +1335,36 @@ select {
   .nav-links.active a {
     color: var(--dark);
     padding: 10px 0;
+    font-size: 0.9rem;
   }
   .hamburger { display: flex; }
   .nav-actions .btn { display: none; }
   .hero { padding: 120px 0 80px; }
   .hero-title { font-size: 2.2rem; }
   .hero-description { font-size: 1rem; }
+  .hero-buttons { flex-direction: column; align-items: center; gap: 12px; }
+  .hero-buttons .btn { width: 100%; max-width: 320px; }
   .stat-number { font-size: 2.2rem; }
   .stat-plus { font-size: 1.5rem; }
   .services-grid { grid-template-columns: 1fr; }
   .individual-grid { grid-template-columns: 1fr; }
   .pricing-grid { grid-template-columns: 1fr; }
+  .pricing-card .btn-block { padding: 14px; font-size: 0.9rem; }
   .social-links { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr; gap: 32px; }
   .modal { padding: 28px 20px; border-radius: var(--radius-lg); }
   .chatbot-window { width: calc(100vw - 48px); right: -12px; }
   .contact-form-wrapper { padding: 28px 20px; }
+  .cta-content .btn { width: 100%; max-width: 320px; }
+}
+@media (max-width: 480px) {
+  .hero-title { font-size: 1.8rem; }
+  .hero-description { font-size: 0.9rem; }
+  .hero-buttons .btn { padding: 14px 24px; font-size: 0.85rem; }
+  .section { padding: 60px 0; }
+  .section-title { font-size: 1.5rem; }
+  .stat-number { font-size: 1.8rem; }
+  .stat-label { font-size: 0.75rem; }
+  .pricing-card { padding: 28px 20px; }
+  .individual-card { padding: 28px 20px; }
 }
