@@ -25,6 +25,8 @@
   --transition-slow: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: 'Playfair Display', Georgia, serif;
+  --container-max: 1200px;
+  --container-gutter: 24px;
 }
 
 /* ===== Reset & Base ===== */
@@ -58,7 +60,7 @@ input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(196,30,30,0.08);
 }
-.container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+.container { max-width: var(--container-max); margin: 0 auto; padding: 0 var(--container-gutter); }
 
 /* ===== Typography ===== */
 .text-gradient {
@@ -1384,4 +1386,97 @@ select {
   .stat-label { font-size: 0.75rem; }
   .pricing-card { padding: 28px 20px; }
   .individual-card { padding: 28px 20px; }
+}
+
+
+/* ===== Extended Responsive ===== */
+@media (min-width: 1440px) {
+  :root {
+    --container-max: 1360px;
+    --container-gutter: 32px;
+  }
+  .section { padding: 132px 0; }
+  .hero-content { max-width: 920px; }
+  .services-grid,
+  .individual-grid,
+  .pricing-grid,
+  .testimonials-grid { gap: 32px; }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --container-max: 1620px;
+    --container-gutter: 48px;
+  }
+  body { font-size: 18px; }
+  .hero { padding: 170px 0 120px; }
+  .hero-content { max-width: 1080px; }
+  .chatbot-window { width: 440px; max-height: 620px; }
+}
+
+@media (min-width: 2560px) {
+  :root {
+    --container-max: 1880px;
+    --container-gutter: 64px;
+  }
+  body { font-size: 20px; }
+  .hero-title { font-size: clamp(4rem, 4.2vw, 5.6rem); }
+  .section-title { font-size: clamp(2.6rem, 2.2vw, 3.8rem); }
+}
+
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .services-grid { grid-template-columns: repeat(2, 1fr); }
+  .testimonials-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  :root { --container-gutter: 20px; }
+  .hero-buttons { flex-direction: column; align-items: center; }
+  .hero-buttons .btn { width: min(100%, 340px); }
+  .scroll-indicator { display: none; }
+  .chatbot-widget { right: 16px; bottom: 16px; }
+}
+
+@media (max-width: 640px) {
+  :root { --container-gutter: 16px; }
+  .navbar { padding: 14px 0; }
+  .logo { font-size: 1.1rem; }
+  .logo-icon { width: 34px; height: 34px; font-size: 1rem; }
+  .hero { min-height: auto; padding: 108px 0 64px; }
+  .hero-badge { font-size: 0.68rem; padding: 7px 14px; margin-bottom: 20px; }
+  .hero-title { font-size: clamp(1.8rem, 8vw, 2.4rem); margin-bottom: 20px; }
+  .hero-description { font-size: 0.95rem; margin-bottom: 28px; }
+  .stats-strip { padding: 44px 0; }
+  .stat-item { flex: 0 0 100%; }
+  .stat-number { font-size: 1.9rem; }
+  .stat-plus { font-size: 1.2rem; }
+  .section { padding: 64px 0; }
+  .section-header { margin-bottom: 44px; }
+  .section-title { font-size: 1.55rem; }
+  .section-subtitle { font-size: 0.95rem; }
+  .service-card,
+  .individual-card,
+  .pricing-card,
+  .testimonial-card { padding: 28px 22px; }
+  .cta-banner { padding: 76px 0; }
+  .contact-grid { gap: 32px; }
+  .contact-form-wrapper { padding: 24px 18px; border-radius: 20px; }
+  .social-link { padding: 12px 14px; font-size: 0.85rem; }
+  .modal-overlay { padding: 12px; }
+  .modal { padding: 24px 16px; max-height: 92vh; }
+  .chatbot-window { width: calc(100vw - 24px); right: -2px; bottom: 62px; }
+}
+
+@media (max-width: 480px) {
+  .nav-actions { gap: 8px; }
+  .btn-lang,
+  .user-menu-toggle { width: 34px; height: 34px; }
+  .hero-title { font-size: 1.65rem; }
+  .price-amount { font-size: 1.8rem; }
+  .pricing-features li { font-size: 0.85rem; padding-left: 20px; }
+  .footer { padding: 64px 0 32px; }
+  .toast { left: 12px; right: 12px; max-width: none; }
+  .chatbot-widget { right: 12px; bottom: 12px; }
+  .chatbot-toggle { width: 52px; height: 52px; }
+  .chatbot-window { width: calc(100vw - 16px); right: -4px; max-height: 68vh; }
 }
