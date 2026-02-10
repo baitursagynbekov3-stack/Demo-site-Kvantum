@@ -6,14 +6,204 @@ let currentLang = localStorage.getItem('kvantum_lang') || 'en';
 
 // Use external API in static hosting (GitHub Pages) via public/config.js
 const API_BASE_URL = (window.KVANTUM_API_BASE_URL || '').trim().replace(/\/$/, '');
+const USE_DEMO_API = window.KVANTUM_USE_DEMO_API === true || (!API_BASE_URL && window.location.hostname.endsWith('github.io'));
 
 function buildApiUrl(path) {
   const normalizedPath = path.startsWith('/') ? path : '/' + path;
   return API_BASE_URL ? API_BASE_URL + normalizedPath : normalizedPath;
 }
 
+function parseJsonBody(options) {
+  if (!options || !options.body) return {};
+  try {
+    return JSON.parse(options.body);
+  } catch (err) {
+    return {};
+  }
+}
+
+function readHeader(headers, key) {
+  if (!headers) return '';
+  if (typeof Headers !== 'undefined' && headers instanceof Headers) {
+    return headers.get(key) || headers.get(key.toLowerCase()) || '';
+  }
+  return headers[key] || headers[key.toLowerCase()] || '';
+}
+
+function getStorageArray(key) {
+  try {
+    const value = localStorage.getItem(key);
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function setStorageArray(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function createApiResponse(status, data) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return data;
+    }
+  };
+}
+
+function demoApi(path, options) {
+  const body = parseJsonBody(options);
+  const usersKey = 'kvantum_demo_users';
+  const bookingsKey = 'kvantum_demo_bookings';
+  const paymentsKey = 'kvantum_demo_payments';
+
+  if (path === '/api/health') {
+    return createApiResponse(200, { ok: true, demo: true });
+  }
+
+  if (path === '/api/register') {
+    const name = (body.name || '').trim();
+    const email = (body.email || '').trim().toLowerCase();
+    const password = body.password || '';
+    const phone = (body.phone || '').trim();
+
+    if (!name || !email || !password) {
+      return createApiResponse(400, { error: 'All fields are required' });
+    }
+
+    const users = getStorageArray(usersKey);
+    if (users.some((u) => u.email === email)) {
+      return createApiResponse(400, { error: 'User already exists' });
+    }
+
+    const user = {
+      id: Date.now(),
+      name,
+      email,
+      phone,
+      password,
+      createdAt: new Date().toISOString()
+    };
+
+    users.push(user);
+    setStorageArray(usersKey, users);
+
+    const token = 'demo-' + btoa(email + ':' + Date.now());
+    return createApiResponse(200, {
+      message: 'Registration successful (demo mode)',
+      token,
+      user: { id: user.id, name: user.name, email: user.email }
+    });
+  }
+
+  if (path === '/api/login') {
+    const email = (body.email || '').trim().toLowerCase();
+    const password = body.password || '';
+    const users = getStorageArray(usersKey);
+    const user = users.find((u) => u.email === email);
+
+    if (!user || user.password !== password) {
+      return createApiResponse(400, { error: 'Invalid credentials' });
+    }
+
+    const token = 'demo-' + btoa(email + ':' + Date.now());
+    return createApiResponse(200, {
+      message: 'Login successful (demo mode)',
+      token,
+      user: { id: user.id, name: user.name, email: user.email }
+    });
+  }
+
+  if (path === '/api/book-consultation') {
+    const name = (body.name || '').trim();
+    const email = (body.email || '').trim();
+    const phone = (body.phone || '').trim();
+
+    if (!name || !email || !phone) {
+      return createApiResponse(400, { error: 'Name, email and phone are required' });
+    }
+
+    const bookings = getStorageArray(bookingsKey);
+    const booking = {
+      id: bookings.length + 1,
+      name,
+      email,
+      phone,
+      service: body.service || 'consultation',
+      message: body.message || '',
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    bookings.push(booking);
+    setStorageArray(bookingsKey, bookings);
+
+    return createApiResponse(200, {
+      message: 'Consultation booked successfully (demo mode)',
+      booking: { id: booking.id, status: booking.status }
+    });
+  }
+
+  if (path === '/api/payment') {
+    const auth = readHeader(options && options.headers, 'Authorization');
+    if (!auth || !auth.startsWith('Bearer demo-')) {
+      return createApiResponse(401, { error: 'Access denied' });
+    }
+
+    const payments = getStorageArray(paymentsKey);
+    const payment = {
+      id: 'PAY-' + Date.now(),
+      productId: body.productId,
+      productName: body.productName,
+      amount: body.amount,
+      currency: body.currency || 'KGS',
+      status: 'completed',
+      createdAt: new Date().toISOString()
+    };
+    payments.push(payment);
+    setStorageArray(paymentsKey, payments);
+
+    return createApiResponse(200, {
+      message: 'Payment processed successfully (demo mode)',
+      payment: {
+        id: payment.id,
+        status: payment.status,
+        amount: payment.amount,
+        currency: payment.currency
+      },
+      notification: 'Demo mode notification sent'
+    });
+  }
+
+  if (path === '/api/notify') {
+    return createApiResponse(200, { message: 'Notification sent (demo mode)' });
+  }
+
+  if (path === '/api/chat') {
+    const text = (body.message || '').toString().trim();
+    const reply = text
+      ? 'Demo mode: thank you for your message. Backend chat will work after API deployment.'
+      : 'Demo mode: ask me anything about programs.';
+    return createApiResponse(200, { reply });
+  }
+
+  return createApiResponse(404, { error: 'Endpoint not available in demo mode' });
+}
+
 function apiFetch(path, options) {
-  return fetch(buildApiUrl(path), options);
+  const normalizedPath = path.startsWith('/') ? path : '/' + path;
+
+  if (API_BASE_URL) {
+    return fetch(buildApiUrl(normalizedPath), options);
+  }
+
+  if (USE_DEMO_API) {
+    return Promise.resolve(demoApi(normalizedPath, options));
+  }
+
+  return fetch(normalizedPath, options);
 }
 
 // ===== Translations =====
