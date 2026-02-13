@@ -22,6 +22,7 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com')
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const ALLOWED_BOOKING_STATUSES = new Set(['pending', 'new', 'in_progress', 'done', 'cancelled']);
 
 const corsOptions = {
   origin(origin, callback) {
@@ -275,6 +276,73 @@ app.post('/api/payment', authenticateToken, async (req, res) => {
 });
 
 
+// Admin booking status update
+app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id, 10);
+    const status = String(req.body.status || '').trim().toLowerCase();
+    const note = String(req.body.note || '').trim();
+
+    if (!Number.isInteger(bookingId) || bookingId <= 0) {
+      return res.status(400).json({ error: 'Invalid booking id' });
+    }
+
+    if (!ALLOWED_BOOKING_STATUSES.has(status)) {
+      return res.status(400).json({ error: 'Invalid booking status' });
+    }
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        service: true,
+        status: true,
+        message: true,
+        createdAt: true
+      }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    let nextMessage = booking.message || '';
+    if (note) {
+      const noteLine = `[ADMIN ${new Date().toISOString()}] ${note}`;
+      nextMessage = nextMessage ? `${nextMessage}
+${noteLine}` : noteLine;
+    }
+
+    const updatedBooking = await prisma.booking.update({
+      where: { id: bookingId },
+      data: {
+        status,
+        message: nextMessage
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        service: true,
+        status: true,
+        message: true,
+        createdAt: true
+      }
+    });
+
+    res.json({
+      message: 'Booking updated successfully',
+      booking: updatedBooking
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Admin dashboard data
 app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
   try {
@@ -313,6 +381,7 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
           phone: true,
           service: true,
           status: true,
+          message: true,
           createdAt: true
         }
       }),
