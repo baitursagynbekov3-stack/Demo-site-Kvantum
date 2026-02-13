@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 
@@ -23,6 +24,11 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 const ALLOWED_BOOKING_STATUSES = new Set(['pending', 'new', 'in_progress', 'done', 'cancelled']);
+const TWILIO_ACCOUNT_SID = (process.env.TWILIO_ACCOUNT_SID || '').trim();
+const TWILIO_AUTH_TOKEN = (process.env.TWILIO_AUTH_TOKEN || '').trim();
+const TWILIO_FROM_NUMBER = (process.env.TWILIO_FROM_NUMBER || '').trim();
+const SMS_VERIFICATION_REQUIRED = process.env.SMS_VERIFICATION_REQUIRED !== 'false';
+const VERIFICATION_CODE_TTL_MINUTES = Math.max(1, Number(process.env.VERIFICATION_CODE_TTL_MINUTES || 10));
 
 const corsOptions = {
   origin(origin, callback) {
@@ -86,14 +92,184 @@ function authenticateAdmin(req, res, next) {
   });
 }
 
+function isValidEmail(email) {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail);
+}
+
+function normalizePhone(phone) {
+  const raw = String(phone || '').trim();
+  if (!raw) return '';
+
+  let value = raw.replace(/[^\d+]/g, '');
+  if (value.startsWith('00')) {
+    value = '+' + value.slice(2);
+  }
+
+  if (value.startsWith('+')) {
+    const digits = value.slice(1).replace(/\D/g, '');
+    if (digits.length < 8 || digits.length > 15) return '';
+    return '+' + digits;
+  }
+
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 10) return '+1' + digits;
+  if (digits.length === 11 && digits.startsWith('1')) return '+' + digits;
+
+  return '';
+}
+
+function generateVerificationCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function createVerificationHash(code, salt) {
+  return crypto
+    .createHash('sha256')
+    .update(`${String(code)}:${String(salt)}:${JWT_SECRET}`)
+    .digest('hex');
+}
+
+function createRegisterVerificationToken(email, phone, code) {
+  const salt = crypto.randomBytes(8).toString('hex');
+  const hash = createVerificationHash(code, salt);
+  return jwt.sign(
+    {
+      purpose: 'register',
+      email,
+      phone,
+      salt,
+      hash
+    },
+    JWT_SECRET,
+    { expiresIn: `${VERIFICATION_CODE_TTL_MINUTES}m` }
+  );
+}
+
+function verifyRegisterCode(token, code, email, phone) {
+  let payload;
+  try {
+    payload = jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return { ok: false, error: 'Verification code expired. Please request a new code.' };
+  }
+
+  if (!payload || payload.purpose !== 'register') {
+    return { ok: false, error: 'Invalid verification token' };
+  }
+
+  if (payload.email !== email || payload.phone !== phone) {
+    return { ok: false, error: 'Verification token does not match email or phone' };
+  }
+
+  const expectedHash = createVerificationHash(code, payload.salt);
+  if (expectedHash !== payload.hash) {
+    return { ok: false, error: 'Invalid verification code' };
+  }
+
+  return { ok: true };
+}
+
+async function sendSmsVerificationCode(phone, code) {
+  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN || !TWILIO_FROM_NUMBER) {
+    return { sent: false };
+  }
+
+  const authHeader = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+  const body = new URLSearchParams({
+    To: phone,
+    From: TWILIO_FROM_NUMBER,
+    Body: `KVANTUM verification code: ${code}`
+  });
+
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${authHeader}`,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: body.toString()
+  });
+
+  if (!response.ok) {
+    const details = await response.text();
+    throw new Error(`Twilio request failed: ${details.slice(0, 400)}`);
+  }
+
+  return { sent: true };
+}
+
+// Send verification code for registration
+app.post('/api/register/send-code', async (req, res) => {
+  try {
+    const { email, phone } = req.body;
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!normalizedEmail || !normalizedPhone) {
+      return res.status(400).json({ error: 'Valid email and phone are required' });
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    const code = generateVerificationCode();
+    const verificationToken = createRegisterVerificationToken(normalizedEmail, normalizedPhone, code);
+
+    const smsResult = await sendSmsVerificationCode(normalizedPhone, code);
+
+    if (!smsResult.sent && SMS_VERIFICATION_REQUIRED && process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'SMS verification is not configured on server' });
+    }
+
+    const payload = {
+      message: 'Verification code sent',
+      verificationToken
+    };
+
+    if (!smsResult.sent && process.env.NODE_ENV !== 'production') {
+      payload.debugCode = code;
+    }
+
+    res.json(payload);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send verification code' });
+  }
+});
+
 // Register
 app.post('/api/register', async (req, res) => {
   try {
-    const { name, email, password, phone } = req.body;
+    const { name, email, password, phone, verificationToken, verificationCode } = req.body;
     const normalizedEmail = (email || '').trim().toLowerCase();
+    const normalizedPhone = normalizePhone(phone);
 
-    if (!name || !normalizedEmail || !password) {
-      return res.status(400).json({ error: 'All fields are required' });
+    if (!name || !normalizedEmail || !password || !normalizedPhone) {
+      return res.status(400).json({ error: 'Name, valid email, password and valid phone are required' });
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    if (String(password).length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    if (!verificationToken || !verificationCode) {
+      return res.status(400).json({ error: 'SMS verification code is required' });
+    }
+
+    const verificationResult = verifyRegisterCode(
+      String(verificationToken),
+      String(verificationCode).trim(),
+      normalizedEmail,
+      normalizedPhone
+    );
+
+    if (!verificationResult.ok) {
+      return res.status(400).json({ error: verificationResult.error });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -101,13 +277,13 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(String(password), 10);
     const user = await prisma.user.create({
       data: {
         name,
         email: normalizedEmail,
         password: hashedPassword,
-        phone: phone || ''
+        phone: normalizedPhone
       }
     });
 
@@ -159,7 +335,7 @@ app.post('/api/reset-password', async (req, res) => {
   try {
     const { email, phone, newPassword } = req.body;
     const normalizedEmail = (email || '').trim().toLowerCase();
-    const normalizedPhone = String(phone || '').replace(/\D/g, '');
+    const normalizedPhone = normalizePhone(phone);
 
     if (!normalizedEmail || !normalizedPhone || !newPassword) {
       return res.status(400).json({ error: 'Email, phone and new password are required' });
@@ -174,7 +350,7 @@ app.post('/api/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email or phone' });
     }
 
-    const storedPhone = String(user.phone || '').replace(/\D/g, '');
+    const storedPhone = normalizePhone(user.phone);
     if (!storedPhone || storedPhone !== normalizedPhone) {
       return res.status(400).json({ error: 'Invalid email or phone' });
     }
