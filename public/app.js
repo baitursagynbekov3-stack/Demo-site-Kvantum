@@ -978,17 +978,46 @@ function renderAdminOverview(data) {
   `;
 }
 
+function ensureAdminModalExists() {
+  let modal = document.getElementById('adminModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'adminModal';
+    modal.innerHTML = `
+      <div class="modal admin-modal">
+        <button class="modal-close" onclick="closeModal('adminModal')">&times;</button>
+        <h2 data-i18n="admin.title">Admin Dashboard</h2>
+        <p class="modal-description" data-i18n="admin.desc">Latest registrations, consultations, and payments.</p>
+        <div id="adminPanelBody" class="admin-panel-body">
+          <p class="admin-empty">${currentLang === 'ru' ? 'Загрузка данных...' : 'Loading data...'}</p>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  const panelBody = document.getElementById('adminPanelBody');
+  if (!panelBody) return null;
+  return panelBody;
+}
+
 async function openAdminDashboard() {
   const dropdown = document.getElementById('userDropdown');
   if (dropdown) dropdown.style.display = 'none';
 
   if (!authToken) {
     showToast(currentLang === 'ru' ? 'Сначала войдите в аккаунт.' : 'Please login first.', 'info');
+    openModal('loginModal');
+    switchTab('login');
     return;
   }
 
-  const panelBody = document.getElementById('adminPanelBody');
-  if (!panelBody) return;
+  const panelBody = ensureAdminModalExists();
+  if (!panelBody) {
+    showToast(currentLang === 'ru' ? 'Не удалось открыть дашборд.' : 'Unable to open dashboard.', 'error');
+    return;
+  }
 
   panelBody.innerHTML = `<p class="admin-empty">${currentLang === 'ru' ? 'Загрузка данных...' : 'Loading data...'}</p>`;
   openModal('adminModal');
