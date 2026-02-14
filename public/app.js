@@ -79,12 +79,15 @@ function demoApi(path, options) {
       return createApiResponse(400, { error: 'User already exists' });
     }
 
+    const demoAdmins = (window.KVANTUM_DEMO_ADMIN_EMAILS || []).map(e => e.toLowerCase());
+    const role = demoAdmins.includes(email) ? 'admin' : 'user';
     const user = {
       id: Date.now(),
       name,
       email,
       phone,
       password,
+      role,
       createdAt: new Date().toISOString()
     };
 
@@ -95,7 +98,7 @@ function demoApi(path, options) {
     return createApiResponse(200, {
       message: 'Registration successful (demo mode)',
       token,
-      user: { id: user.id, name: user.name, email: user.email }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
   }
 
@@ -113,7 +116,7 @@ function demoApi(path, options) {
     return createApiResponse(200, {
       message: 'Login successful (demo mode)',
       token,
-      user: { id: user.id, name: user.name, email: user.email }
+      user: { id: user.id, name: user.name, email: user.email, role: user.role || 'user' }
     });
   }
 
@@ -187,6 +190,88 @@ function demoApi(path, options) {
       ? 'Demo mode: thank you for your message. Backend chat will work after API deployment.'
       : 'Demo mode: ask me anything about programs.';
     return createApiResponse(200, { reply });
+  }
+
+  // ===== Demo content endpoints =====
+  const testimonialsKey = 'kvantum_demo_testimonials';
+  const programsKey = 'kvantum_demo_programs';
+  const servicesDataKey = 'kvantum_demo_services';
+
+  if (path === '/api/content/testimonials') {
+    return createApiResponse(200, getStorageArray(testimonialsKey));
+  }
+  if (path === '/api/content/programs') {
+    return createApiResponse(200, getStorageArray(programsKey));
+  }
+  if (path === '/api/services' && (!options || !options.method || options.method === 'GET')) {
+    return createApiResponse(200, getStorageArray(servicesDataKey));
+  }
+
+  // ===== Demo admin endpoints =====
+  const method = (options && options.method || 'GET').toUpperCase();
+  const auth = readHeader(options && options.headers, 'Authorization');
+
+  function getDemoUserRole() {
+    if (!auth || !auth.startsWith('Bearer demo-')) return null;
+    try {
+      const decoded = atob(auth.replace('Bearer demo-', ''));
+      const email = decoded.split(':')[0];
+      const users = getStorageArray(usersKey);
+      const user = users.find(u => u.email === email);
+      return user ? (user.role || 'user') : 'user';
+    } catch (e) { return 'user'; }
+  }
+
+  if (path === '/api/admin/check') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+    return createApiResponse(200, { isAdmin: true });
+  }
+
+  // Admin CRUD helper
+  function adminCrud(storageKey, idPrefix) {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+    const items = getStorageArray(storageKey);
+
+    if (method === 'GET') return createApiResponse(200, items);
+    if (method === 'POST') {
+      const item = { _id: idPrefix + Date.now(), ...body, order: items.length + 1 };
+      items.push(item);
+      setStorageArray(storageKey, items);
+      return createApiResponse(201, item);
+    }
+    return createApiResponse(404, { error: 'Not found' });
+  }
+
+  if (path === '/api/admin/testimonials') return adminCrud(testimonialsKey, 'dt');
+  if (path === '/api/admin/programs') return adminCrud(programsKey, 'dp');
+  if (path === '/api/admin/services') return adminCrud(servicesDataKey, 'ds');
+
+  // Admin CRUD with ID parameter
+  const adminMatch = path.match(/^\/api\/admin\/(testimonials|programs|services)\/(.+)$/);
+  if (adminMatch) {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+    const type = adminMatch[1];
+    const id = adminMatch[2];
+    const keyMap = { testimonials: testimonialsKey, programs: programsKey, services: servicesDataKey };
+    const storageKey = keyMap[type];
+    let items = getStorageArray(storageKey);
+    const idx = items.findIndex(i => i._id === id);
+
+    if (method === 'PUT') {
+      if (idx === -1) return createApiResponse(404, { error: 'Not found' });
+      items[idx] = { ...items[idx], ...body, _id: id };
+      setStorageArray(storageKey, items);
+      return createApiResponse(200, items[idx]);
+    }
+    if (method === 'DELETE') {
+      if (idx === -1) return createApiResponse(404, { error: 'Not found' });
+      items.splice(idx, 1);
+      setStorageArray(storageKey, items);
+      return createApiResponse(200, { message: 'Deleted' });
+    }
   }
 
   return createApiResponse(404, { error: 'Endpoint not available in demo mode' });
@@ -447,6 +532,8 @@ function toggleLanguage() {
   localStorage.setItem('kvantum_lang', currentLang);
   applyTranslations(currentLang);
   updateLangButton();
+  if (cachedTestimonials) renderTestimonials(cachedTestimonials);
+  if (cachedPrograms) renderPrograms(cachedPrograms);
 }
 
 function updateLangButton() {
@@ -454,8 +541,108 @@ function updateLangButton() {
   if (flag) flag.textContent = currentLang === 'en' ? 'RU' : 'EN';
 }
 
+// ===== Dynamic Content =====
+let cachedTestimonials = null;
+let cachedPrograms = null;
+
+async function loadSiteContent() {
+  try {
+    const [tRes, pRes] = await Promise.all([
+      apiFetch('/api/content/testimonials'),
+      apiFetch('/api/content/programs')
+    ]);
+    const testimonials = await tRes.json();
+    const programs = await pRes.json();
+    if (Array.isArray(testimonials) && testimonials.length > 0) {
+      cachedTestimonials = testimonials;
+      renderTestimonials(testimonials);
+    }
+    if (Array.isArray(programs) && programs.length > 0) {
+      cachedPrograms = programs;
+      renderPrograms(programs);
+    }
+  } catch (err) {
+    // Fallback: keep hardcoded HTML
+  }
+}
+
+function renderTestimonials(items) {
+  const grid = document.querySelector('.testimonials-grid');
+  if (!grid || !items.length) return;
+  const lang = currentLang;
+  grid.innerHTML = items.map(t => {
+    const text = lang === 'ru' && t.text_ru ? t.text_ru : t.text;
+    const role = lang === 'ru' && t.role_ru ? t.role_ru : t.role;
+    const initial = t.authorInitial || (t.authorName || '?').charAt(0);
+    return `<div class="testimonial-card anim-fade-up anim-visible">
+      <div class="testimonial-quote">&ldquo;</div>
+      <p>"${escapeHtml(text)}"</p>
+      <div class="testimonial-author">
+        <div class="author-avatar">${escapeHtml(initial)}</div>
+        <div class="author-info">
+          <strong>${escapeHtml(t.authorName)}</strong>
+          <span>${escapeHtml(role)}</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderPrograms(items) {
+  const grid = document.querySelector('.pricing-grid');
+  if (!grid || !items.length) return;
+  const lang = currentLang;
+  grid.innerHTML = items.map(p => {
+    const name = lang === 'ru' && p.name_ru ? p.name_ru : p.name;
+    const tagline = lang === 'ru' && p.tagline_ru ? p.tagline_ru : p.tagline;
+    const tierLabel = lang === 'ru' && p.tierLabel_ru ? p.tierLabel_ru : p.tierLabel;
+    const priceCurrency = lang === 'ru' && p.priceCurrency_ru ? p.priceCurrency_ru : p.priceCurrency;
+    const priceAmount = lang === 'ru' && p.priceAmount_ru ? p.priceAmount_ru : p.priceAmount;
+    const btnText = lang === 'ru' && p.buttonText_ru ? p.buttonText_ru : p.buttonText;
+    const features = lang === 'ru' && p.features_ru && p.features_ru.length ? p.features_ru : (p.features || []);
+    const cssClass = p.cssClass || '';
+    const popularBadge = p.popular ? `<div class="pricing-popular-badge">${lang === 'ru' ? tierLabel : tierLabel}</div>` : '';
+    const tierBadge = !p.popular && tierLabel ? `<div class="pricing-tier">${escapeHtml(tierLabel)}</div>` : '';
+
+    let btnHtml;
+    if (p.actionType === 'consult') {
+      btnHtml = `<button class="btn btn-primary btn-block" onclick="openModal('consultModal')">${escapeHtml(btnText)}</button>`;
+    } else {
+      btnHtml = `<button class="btn btn-primary btn-block" onclick="handlePurchase('${escapeHtml(p._id || p.id)}', '${escapeHtml(p.name)}', ${p.priceNumeric || 0}, '${escapeHtml(p.purchaseCurrency || 'KGS')}')">${escapeHtml(btnText)}</button>`;
+    }
+
+    return `<div class="pricing-card anim-fade-up anim-visible ${cssClass}" data-tier="${escapeHtml(p.tier || '')}">
+      ${popularBadge}${tierBadge}
+      <h3 class="pricing-name">${escapeHtml(name)}</h3>
+      <p class="pricing-tagline">${escapeHtml(tagline)}</p>
+      <div class="pricing-price">
+        <span class="price-amount">${escapeHtml(priceAmount)}</span>
+        <span class="price-currency">${escapeHtml(priceCurrency)}</span>
+      </div>
+      <ul class="pricing-features">
+        ${features.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+      </ul>
+      ${btnHtml}
+    </div>`;
+  }).join('');
+}
+
+// ===== Dark Mode =====
+function toggleDarkMode() {
+  document.body.classList.toggle('dark-mode');
+  const isDark = document.body.classList.contains('dark-mode');
+  localStorage.setItem('kvantum_dark', isDark ? 'true' : 'false');
+}
+
+function initDarkMode() {
+  if (localStorage.getItem('kvantum_dark') === 'true') {
+    document.body.classList.add('dark-mode');
+  }
+}
+
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
+  initDarkMode();
   storeOriginals();
   initNavbar();
   initScrollAnimations();
@@ -463,6 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
   checkAuth();
   updateLangButton();
   if (currentLang !== 'en') applyTranslations(currentLang);
+  loadSiteContent();
 
   // Trigger hero animations immediately
   setTimeout(() => {
@@ -591,15 +779,18 @@ function updateUIForLoggedIn() {
   const userMenu = document.getElementById('userMenu');
   const userName = document.getElementById('userName');
   const userInitials = document.getElementById('userInitials');
+  const adminLink = document.getElementById('adminLink');
 
   if (currentUser) {
     if (loginBtn) loginBtn.style.display = 'none';
     if (userMenu) userMenu.style.display = 'block';
     if (userName) userName.textContent = currentUser.name;
     if (userInitials) userInitials.textContent = currentUser.name.charAt(0).toUpperCase();
+    if (adminLink) adminLink.style.display = currentUser.role === 'admin' ? 'block' : 'none';
   } else {
     if (loginBtn) loginBtn.style.display = '';
     if (userMenu) userMenu.style.display = 'none';
+    if (adminLink) adminLink.style.display = 'none';
   }
 }
 

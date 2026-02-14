@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KVANTUM Admin Panel</title>
+  <link rel="stylesheet" href="./style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+
+    /* Layout */
+    .admin-layout { display: flex; min-height: 100vh; }
+    .admin-sidebar {
+      width: 240px; background: #111; border-right: 1px solid rgba(255,255,255,0.06);
+      padding: 24px 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10;
+      display: flex; flex-direction: column;
+    }
+    .admin-sidebar .logo { padding: 0 20px 24px; display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .admin-sidebar .logo-icon { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, #a78bfa, #7c3aed); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 16px; }
+    .admin-sidebar .logo-text { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: 1px; }
+    .admin-sidebar .badge { font-size: 10px; background: #7c3aed; color: #fff; padding: 2px 8px; border-radius: 12px; margin-left: 4px; font-weight: 600; }
+
+    .sidebar-nav { flex: 1; }
+    .sidebar-nav a {
+      display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: #999;
+      text-decoration: none; font-size: 14px; font-weight: 500; transition: all 0.2s;
+      border-left: 3px solid transparent;
+    }
+    .sidebar-nav a:hover { color: #e0e0e0; background: rgba(255,255,255,0.03); }
+    .sidebar-nav a.active { color: #a78bfa; background: rgba(167,139,250,0.06); border-left-color: #a78bfa; }
+    .sidebar-nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .sidebar-bottom { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.06); }
+    .sidebar-bottom a { display: block; color: #666; text-decoration: none; font-size: 13px; padding: 6px 0; }
+    .sidebar-bottom a:hover { color: #e0e0e0; }
+
+    .admin-main { margin-left: 240px; flex: 1; padding: 32px; min-height: 100vh; }
+
+    /* Header */
+    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .admin-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0; }
+    .admin-header .btn { padding: 10px 20px; }
+
+    /* Cards */
+    .admin-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+    .admin-card {
+      background: #1a1a1a; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+      padding: 20px; position: relative; transition: border-color 0.2s;
+    }
+    .admin-card:hover { border-color: rgba(167,139,250,0.3); }
+    .admin-card h3 { margin: 0 0 8px; font-size: 16px; color: #fff; }
+    .admin-card p { margin: 0 0 12px; font-size: 13px; color: #888; line-height: 1.5; }
+    .admin-card .card-meta { font-size: 12px; color: #666; margin-bottom: 12px; }
+    .admin-card .card-actions { display: flex; gap: 8px; }
+    .admin-card .card-actions button { padding: 6px 14px; font-size: 12px; }
+    .card-badge { display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 6px; background: rgba(167,139,250,0.15); color: #a78bfa; margin-bottom: 8px; }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 8px; font-family: inherit; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: linear-gradient(135deg, #a78bfa, #7c3aed); color: #fff; }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-secondary { background: #222; color: #ccc; border: 1px solid rgba(255,255,255,0.08); }
+    .btn-secondary:hover { background: #2a2a2a; color: #fff; }
+    .btn-danger { background: rgba(239,68,68,0.12); color: #ef4444; }
+    .btn-danger:hover { background: rgba(239,68,68,0.2); }
+    .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+    /* Modal */
+    .admin-modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100;
+      justify-content: center; align-items: flex-start; padding: 60px 20px; overflow-y: auto;
+    }
+    .admin-modal-overlay.active { display: flex; }
+    .admin-modal {
+      background: #1a1a1a; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px;
+      width: 100%; max-width: 560px; padding: 28px; position: relative;
+    }
+    .admin-modal h2 { margin: 0 0 20px; font-size: 20px; color: #fff; }
+    .admin-modal .close-btn {
+      position: absolute; top: 16px; right: 16px; background: none; border: none;
+      color: #666; font-size: 22px; cursor: pointer; width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center; border-radius: 8px;
+    }
+    .admin-modal .close-btn:hover { background: rgba(255,255,255,0.06); color: #fff; }
+
+    /* Forms */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 500; color: #999; margin-bottom: 6px; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 10px 14px; background: #111; border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; color: #e0e0e0; font-family: inherit; font-size: 14px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      border-color: #a78bfa;
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-group select { cursor: pointer; }
+    .form-group select option { background: #111; color: #e0e0e0; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* Toast */
+    .admin-toast {
+      position: fixed; top: 20px; right: 20px; z-index: 200; padding: 12px 20px;
+      border-radius: 10px; font-size: 14px; font-weight: 500; color: #fff;
+      animation: slideIn 0.3s ease; max-width: 360px;
+    }
+    .admin-toast.success { background: #059669; }
+    .admin-toast.error { background: #dc2626; }
+    .admin-toast.info { background: #2563eb; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 60px 20px; color: #555; }
+    .empty-state svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.3; }
+    .empty-state p { font-size: 15px; margin: 0 0 16px; }
+
+    /* Access denied */
+    .access-denied { text-align: center; padding: 120px 20px; }
+    .access-denied h1 { font-size: 32px; color: #fff; margin-bottom: 12px; }
+    .access-denied p { color: #666; font-size: 16px; margin-bottom: 24px; }
+
+    /* Loading */
+    .admin-loading { text-align: center; padding: 60px; color: #666; }
+
+    /* Feature list in cards */
+    .features-preview { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .features-preview span { background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #888; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .admin-sidebar { width: 60px; padding: 16px 0; }
+      .admin-sidebar .logo-text, .admin-sidebar .badge, .sidebar-nav a span, .sidebar-bottom { display: none; }
+      .admin-sidebar .logo { padding: 0 12px 16px; }
+      .sidebar-nav a { padding: 12px; justify-content: center; }
+      .admin-main { margin-left: 60px; padding: 20px; }
+      .admin-cards { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="adminApp">
+    <!-- Loading state -->
+    <div class="admin-loading" id="loadingState">
+      <p>Checking access...</p>
+    </div>
+
+    <!-- Access denied -->
+    <div class="access-denied" id="deniedState" style="display:none">
+      <h1>Access Denied</h1>
+      <p>You don't have admin privileges. Please log in with an admin account.</p>
+      <a href="./index.html" class="btn btn-primary" style="padding:12px 28px;font-size:15px;text-decoration:none;">Back to Site</a>
+    </div>
+
+    <!-- Admin panel -->
+    <div class="admin-layout" id="adminLayout" style="display:none">
+      <aside class="admin-sidebar">
+        <a href="./index.html" class="logo">
+          <span class="logo-icon">Q</span>
+          <span class="logo-text">KVANTUM</span>
+          <span class="badge">Admin</span>
+        </a>
+        <nav class="sidebar-nav">
+          <a href="#" class="active" data-section="testimonials" onclick="switchSection('testimonials', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <span>Testimonials</span>
+          </a>
+          <a href="#" data-section="programs" onclick="switchSection('programs', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span>Programs</span>
+          </a>
+          <a href="#" data-section="services" onclick="switchSection('services', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span>Services</span>
+          </a>
+        </nav>
+        <div class="sidebar-bottom">
+          <a href="./index.html">Back to Site</a>
+        </div>
+      </aside>
+
+      <main class="admin-main">
+        <!-- Testimonials Section -->
+        <div id="section-testimonials">
+          <div class="admin-header">
+            <h1>Testimonials</h1>
+            <button class="btn btn-primary" onclick="openTestimonialForm()">+ Add Testimonial</button>
+          </div>
+          <div class="admin-cards" id="testimonialsList"></div>
+        </div>
+
+        <!-- Programs Section -->
+        <div id="section-programs" style="display:none">
+          <div class="admin-header">
+            <h1>Programs</h1>
+            <button class="btn btn-primary" onclick="openProgramForm()">+ Add Program</button>
+          </div>
+          <div class="admin-cards" id="programsList"></div>
+        </div>
+
+        <!-- Services Section -->
+        <div id="section-services" style="display:none">
+          <div class="admin-header">
+            <h1>Services</h1>
+            <button class="btn btn-primary" onclick="openServiceForm()">+ Add Service</button>
+          </div>
+          <div class="admin-cards" id="servicesList"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Testimonial Modal -->
+  <div class="admin-modal-overlay" id="testimonialModal">
+    <div class="admin-modal">
+      <button class="close-btn" onclick="closeAdminModal('testimonialModal')">&times;</button>
+      <h2 id="testimonialModalTitle">Add Testimonial</h2>
+      <form id="testimonialForm" onsubmit="saveTestimonial(event)">
+        <input type="hidden" id="testimonialId">
+        <div class="form-group">
+          <label>Quote Text (EN)</label>
+          <textarea id="tText" required placeholder="What the client said..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Quote Text (RU)</label>
+          <textarea id="tTextRu" placeholder="Russian translation..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Author Name</label>
+            <input type="text" id="tAuthor" required placeholder="e.g. Aisuluu K.">
+          </div>
+          <div class="form-group">
+            <label>Author Initial</label>
+            <input type="text" id="tInitial" maxlength="2" placeholder="A">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Role (EN)</label>
+            <input type="text" id="tRole" placeholder="e.g. Entrepreneur">
+          </div>
+          <div class="form-group">
+            <label>Role (RU)</label>
+            <input type="text" id="tRoleRu" placeholder="e.g. Предприниматель">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Order</label>
+          <input type="number" id="tOrder" value="0" min="0">
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeAdminModal('testimonialModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="padding:10px 24px;">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Program Modal -->
+  <div class="admin-modal-overlay" id="programModal">
+    <div class="admin-modal">
+      <button class="close-btn" onclick="closeAdminModal('programModal')">&times;</button>
+      <h2 id="programModalTitle">Add Program</h2>
+      <form id="programForm" onsubmit="saveProgram(event)">
+        <input type="hidden" id="pId">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Name (EN)</label>
+            <input type="text" id="pName" required placeholder="e.g. Brain Charge">
+          </div>
+          <div class="form-group">
+            <label>Name (RU)</label>
+            <input type="text" id="pNameRu" placeholder="e.g. Зарядка мозга">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tier</label>
+            <select id="pTier">
+              <option value="entry">Entry</option>
+              <option value="standard" selected>Standard</option>
+              <option value="popular">Popular</option>
+              <option value="premium">Premium</option>
+              <option value="elite">Elite</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>CSS Class</label>
+            <select id="pCssClass">
+              <option value="">Default</option>
+              <option value="popular">Popular (highlighted)</option>
+              <option value="premium">Premium</option>
+              <option value="mentorship">Mentorship</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tier Label (EN)</label>
+            <input type="text" id="pTierLabel" placeholder="e.g. Entry Level">
+          </div>
+          <div class="form-group">
+            <label>Tier Label (RU)</label>
+            <input type="text" id="pTierLabelRu" placeholder="e.g. Точка входа">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tagline (EN)</label>
+            <input type="text" id="pTagline" placeholder="e.g. Reality Reprogramming">
+          </div>
+          <div class="form-group">
+            <label>Tagline (RU)</label>
+            <input type="text" id="pTaglineRu" placeholder="Russian tagline">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Price Display</label>
+            <input type="text" id="pPriceAmount" placeholder="e.g. 1,000 or $300">
+          </div>
+          <div class="form-group">
+            <label>Price Currency Label</label>
+            <input type="text" id="pPriceCurrency" placeholder="e.g. KGS / RUB">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Numeric Price (for payment)</label>
+            <input type="number" id="pPriceNumeric" value="0" min="0">
+          </div>
+          <div class="form-group">
+            <label>Purchase Currency</label>
+            <select id="pPurchaseCurrency">
+              <option value="KGS">KGS</option>
+              <option value="USD">USD</option>
+              <option value="RUB">RUB</option>
+              <option value="">None (Contact)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Features (EN) - one per line</label>
+          <textarea id="pFeatures" rows="5" placeholder="21 days program&#10;15 minutes per day&#10;..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Features (RU) - one per line</label>
+          <textarea id="pFeaturesRu" rows="5" placeholder="Программа 21 день&#10;15 минут в день&#10;..."></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Button Text (EN)</label>
+            <input type="text" id="pBtnText" placeholder="Get Started">
+          </div>
+          <div class="form-group">
+            <label>Button Text (RU)</label>
+            <input type="text" id="pBtnTextRu" placeholder="Начать">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Action Type</label>
+            <select id="pActionType">
+              <option value="purchase">Purchase (opens payment)</option>
+              <option value="consult">Consult (opens booking)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Popular?</label>
+            <select id="pPopular">
+              <option value="false">No</option>
+              <option value="true">Yes (shows badge)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Order</label>
+          <input type="number" id="pOrder" value="0" min="0">
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeAdminModal('programModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="padding:10px 24px;">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Service Modal -->
+  <div class="admin-modal-overlay" id="serviceModal">
+    <div class="admin-modal">
+      <button class="close-btn" onclick="closeAdminModal('serviceModal')">&times;</button>
+      <h2 id="serviceModalTitle">Add Service</h2>
+      <form id="serviceForm" onsubmit="saveService(event)">
+        <input type="hidden" id="sId">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" id="sTitle" required placeholder="Service title">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="sDescription" placeholder="Service description"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Price</label>
+            <input type="number" id="sPrice" required min="0" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>Currency</label>
+            <select id="sCurrency">
+              <option value="KGS">KGS</option>
+              <option value="USD">USD</option>
+              <option value="RUB">RUB</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Duration</label>
+            <input type="text" id="sDuration" placeholder="e.g. 1 hour, 4 weeks">
+          </div>
+          <div class="form-group">
+            <label>Available</label>
+            <select id="sAvailability">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeAdminModal('serviceModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="padding:10px 24px;">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="./config.js"></script>
+  <script src="./admin.js"></script>
+</body>
+</html>
