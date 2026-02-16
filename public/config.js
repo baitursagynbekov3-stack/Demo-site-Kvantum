@@ -5,7 +5,7 @@
 
   window.QUANTUM_API_BASE_URL = isLocal
     ? 'http://localhost:3000'
-    : 'https://quantum-self.vercel.app';
+    : 'https://kvantum-api.vercel.app';
 
   window.QUANTUM_USE_DEMO_API = false;
 
