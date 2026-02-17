@@ -11,7 +11,7 @@ let adminFilters = {
 
 // Use external API in static hosting (GitHub Pages) via public/config.js
 const API_BASE_URL = (window.QUANTUM_API_BASE_URL || '').trim().replace(/\/$/, '');
-const USE_DEMO_API = window.QUANTUM_USE_DEMO_API === true || (!API_BASE_URL && window.location.hostname.endsWith('github.io'));
+const USE_DEMO_API = window.QUANTUM_USE_DEMO_API === true;
 const CHAT_SESSION_STORAGE_KEY = 'quantum_chat_session_id';
 const chatSessionIdCache = Object.create(null);
 

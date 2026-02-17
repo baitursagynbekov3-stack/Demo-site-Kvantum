@@ -902,73 +902,155 @@ function formatKnowledgeFallback(section, useRu) {
 function getRuleBasedReply(message, useRu, knowledgeText) {
   const lowerMsg = String(message || '').toLowerCase();
 
-  if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('привет') || lowerMsg.includes('здравствуйте')) {
+  // Greeting
+  if (/(^|\s)(hello|hey|hi|good\s*(morning|evening|day|afternoon)|привет|здравствуйте|салам|добрый\s*(день|вечер|утро)|здрасте)(\s|$)/i.test(lowerMsg)) {
     return useRu
-      ? 'Добро пожаловать в KVANTUM! Я могу рассказать о программах, ценах и сразу оформить бесплатную консультацию.'
-      : 'Welcome to KVANTUM! I can explain programs, pricing, and create a free consultation request right in chat.';
+      ? 'Здравствуйте! Добро пожаловать в КВАНТУМ! Я ваш AI-ассистент. Могу помочь с:\n\n• Информация о программах и ценах\n• Запись на бесплатную консультацию\n• Как проходят сессии\n• Способы оплаты\n\nЧто вас интересует?'
+      : 'Hello! Welcome to QUANTUM! I\'m your AI assistant. I can help you with:\n\n• Program info & pricing\n• Booking a free consultation\n• How our sessions work\n• Payment methods\n\nWhat would you like to know?';
   }
 
-  if (lowerMsg.includes('price') || lowerMsg.includes('cost') || lowerMsg.includes('цена') || lowerMsg.includes('стоимость') || lowerMsg.includes('сколько')) {
+  // Pricing
+  if (/(price|pricing|cost|how much|tariff|тариф|цен[аыу]|стоимост|сколько стоит|прайс|расценк)/i.test(lowerMsg)) {
     return useRu
-      ? 'Актуальные программы и цены:\n\n1. Brain Charge — 1,000 KGS/RUB\n2. Resources Club — 5,000 KGS/месяц\n3. Intensive "Mom & Dad - My 2 Wings" — $300 / 26,300 KGS\n4. REBOOT — $1,000\n5. Mentorship — цену уточняет менеджер\n\nМогу помочь выбрать под вашу задачу и сразу оформить бесплатную консультацию.'
-      : 'Current programs and pricing:\n\n1. Brain Charge — 1,000 KGS/RUB\n2. Resources Club — 5,000 KGS/month\n3. Intensive "Mom & Dad - My 2 Wings" — $300 / 26,300 KGS\n4. REBOOT — $1,000\n5. Mentorship — pricing via manager\n\nI can help you choose the best option and create a free consultation request now.';
+      ? 'Наши программы и цены:\n\n1. Зарядка мозга (вход) — 1,000 сом/руб\n2. Клуб «Ресурсы» — 5,000 сом/мес\n3. Интенсив «Папа, Мама» — $300 / 26,300 сом\n4. ПЕРЕЗАГРУЗКА (премиум) — $1,000\n5. Наставничество (элит) — уточняйте у менеджеров\n\nВсе программы включают личное сопровождение. Хотите подробнее о какой-то программе или записаться на бесплатную консультацию?'
+      : 'Our programs & pricing:\n\n1. Brain Charge (entry) — 1,000 KGS/RUB\n2. Club "Resources" — 5,000 KGS/month\n3. Intensive "Mom & Dad" — $300 / 26,300 KGS\n4. REBOOT (premium) — $1,000 USD\n5. Mentorship (elite) — contact us for pricing\n\nAll programs include personal support. Would you like details on any specific program, or shall I help you book a free consultation?';
   }
 
-  if (lowerMsg.includes('brain') || lowerMsg.includes('зарядка') || lowerMsg.includes('мозг')) {
+  // Brain Charge
+  if (/(brain\s*charge|зарядк[аиу]\s*мозг|мозг.*зарядк|brain.*program|первая программ)/i.test(lowerMsg)) {
     return useRu
-      ? 'Brain Charge — входная программа: 21 день, по ~15 минут в день, стоимость 1,000 KGS/RUB. Подходит, чтобы мягко начать трансформацию состояния и привычек.'
-      : 'Brain Charge is our entry program: 21 days, about 15 minutes daily, price 1,000 KGS/RUB. It is the easiest way to start your transformation.';
+      ? 'Зарядка мозга — Перепрограммирование реальности:\n\n• Длительность: 21 день\n• Формат: 15 минут в день, онлайн\n• Расписание: 6:00 утра по времени КР\n• Цена: 1,000 сом / 1,000 руб\n\nЧто входит:\n— Работа с мыслями и чувствами\n— Техники трансформации состояния\n— Изменения в жизни, отношениях и финансах\n\nИдеальная точка входа для трансформации! Хотите записаться?'
+      : 'Brain Charge — Reality Reprogramming:\n\n• Duration: 21 days\n• Format: 15 minutes per day, online\n• Schedule: 6:00 AM Kyrgyzstan time\n• Price: 1,000 KGS / 1,000 RUB\n\nWhat you get:\n— Work with thoughts & feelings\n— State transformation techniques\n— Shifts in life, relationships & finances\n\nThis is the perfect starting point for your transformation! Want to enroll?';
   }
 
-  if (lowerMsg.includes('resource') || lowerMsg.includes('club') || lowerMsg.includes('клуб') || lowerMsg.includes('ресурс')) {
+  // Resources Club
+  if (/(resource|club|клуб|ресурс)/i.test(lowerMsg)) {
     return useRu
-      ? 'Resources Club: 4 недели, 2 сессии с Алтынай и 2 с куратором, фокус на внутреннем состоянии, уверенности и самоценности. Цена — 5,000 KGS/месяц.'
-      : 'Resources Club: 4 weeks, 2 sessions with Altynai and 2 with a curator, focused on confidence, self-worth, and inner state. Price is 5,000 KGS/month.';
+      ? 'Клуб «Ресурсы» — Усиление состояния:\n\n• Длительность: 4 недели\n• 2 встречи с Алтынай лично\n• 2 встречи с куратором\n• Формат: онлайн групповые сессии\n• Цена: 5,000 сом/мес\n\nНаправления работы:\n— Защищённость и уверенность\n— Ценность и любовь к себе\n— Свобода и внутренняя опора\n\nГотовы усилить своё состояние?'
+      : 'Club "Resources" — State Enhancement:\n\n• Duration: 4 weeks\n• 2 sessions with Altynai personally\n• 2 sessions with a curator\n• Format: online group sessions\n• Price: 5,000 KGS/month\n\nFocus areas:\n— Building confidence & security\n— Self-worth & self-love\n— Freedom & inner foundation\n\nReady to strengthen your inner state?';
   }
 
-  if (lowerMsg.includes('intensive') || lowerMsg.includes('интенсив') || lowerMsg.includes('papa') || lowerMsg.includes('mama') || lowerMsg.includes('папа') || lowerMsg.includes('мама')) {
+  // Intensive
+  if (/(intensive|интенсив|mom\s*(and|&|,)?\s*dad|papa|mama|папа|мама|родител|крыл|wings)/i.test(lowerMsg)) {
     return useRu
-      ? 'Интенсив "Mom & Dad - My 2 Wings": формат 1 месяц, 10 уроков, 20 практик, 3 Zoom-сессии. Тема — работа с родовыми паттернами. Стоимость: $300 / 26,300 KGS.'
-      : 'The "Mom & Dad - My 2 Wings" intensive runs for 1 month with 10 lessons, 20 practices, and 3 Zoom sessions. Focus is family-pattern work. Price: $300 / 26,300 KGS.';
+      ? 'Интенсив «Папа, Мама — мои 2 крыла»:\n\n• Длительность: 1 месяц\n• 10 уроков + 20 практических упражнений\n• 3 Zoom встречи с Алтынай\n• Формат: онлайн, в своём темпе + живые сессии\n• Цена: $300 / 26,300 сом\n\nТемы:\n— Сепарация и независимость от родителей\n— Выход из унаследованных сценариев\n— Восстановление семейной иерархии\n— Снятие детских блоков\n\nЭто наша самая популярная программа!'
+      : 'Intensive "Mom & Dad — My 2 Wings":\n\n• Duration: 1 month\n• 10 lessons + 20 practical exercises\n• 3 Zoom sessions with Altynai\n• Format: online, self-paced + live sessions\n• Price: $300 / 26,300 KGS\n\nTopics covered:\n— Separation & independence from parents\n— Breaking inherited patterns & scenarios\n— Restoring family hierarchy\n— Releasing childhood blocks\n\nThis is our most popular program!';
   }
 
-  if (lowerMsg.includes('reboot') || lowerMsg.includes('перезагрузка')) {
+  // REBOOT
+  if (/(reboot|перезагрузк|ребут|управлени.*реальност|reality.*manage)/i.test(lowerMsg)) {
     return useRu
-      ? 'REBOOT — 8 недель, 24 занятия: ценности, состояние, отношения, финансы. Включает глубокую практическую работу. Стоимость — $1,000.'
-      : 'REBOOT is an 8-week program with 24 sessions covering values, state management, relationships, and finances. Price is $1,000.';
+      ? 'ПЕРЕЗАГРУЗКА — Осознанное управление реальностью:\n\n• Длительность: 8 недель, 24 встречи\n• 20 уроков + 20 практик\n• 1 личная встреча с Алтынай\n• 2 встречи с кураторами\n• Формат: онлайн, структурированные еженедельные модули\n• Цена: $1,000\n\nТемы:\n— Ценности и личные принципы\n— Мастерство управления состоянием\n— Отношения без зависимости\n— Финансы под вашим контролем\n\nГлубокая трансформация всей вашей реальности.'
+      : 'REBOOT — Conscious Reality Management:\n\n• Duration: 8 weeks, 24 sessions\n• 20 lessons + 20 practices\n• 1 personal session with Altynai\n• 2 curator sessions\n• Format: online, structured weekly modules\n• Price: $1,000 USD\n\nTopics:\n— Values & personal principles\n— State management mastery\n— Relationships without dependency\n— Financial control & abundance mindset\n\nA deep transformation of your entire reality.';
   }
 
-  if (lowerMsg.includes('mentor') || lowerMsg.includes('наставнич')) {
+  // Mentorship
+  if (/(mentor|наставничеств|университет|самопознан|elite|элит|premium.*program|продвинут)/i.test(lowerMsg)) {
     return useRu
-      ? 'Mentorship (University of Self-Knowledge) — премиальный формат, цена по запросу через менеджера. Могу сразу оформить заявку на бесплатную консультацию для подбора.'
-      : 'Mentorship (University of Self-Knowledge) is our premium format, with pricing provided by managers. I can create a free consultation request right now.';
+      ? 'Наставничество — Университет самопознания:\n\nЭлитная программа для тех, кто хочет освоить эти навыки профессионально:\n\n• Считывание поля\n• Работа с эмоциями и блоками подсознания\n• Мастерство квантового поля\n• 30 практик НЛП\n• Основы расстановок\n• Живая практика с кураторами\n• Полная передача знаний\n\nФормат: онлайн + живые практики\nЦена: индивидуально — уточняйте у менеджеров\n\nЗачисление только после личной консультации с Алтынай.'
+      : 'Mentorship — University of Self-Knowledge:\n\nOur elite program for those who want to master these skills professionally:\n\n• Field reading skills\n• Emotions & subconscious block work\n• Quantum field mastery\n• 30 NLP practices\n• Constellation fundamentals\n• Live practice with curators\n• Full knowledge transfer\n\nFormat: online + live practice sessions\nPrice: individual — contact our managers\n\nThis program is by application only after a personal consultation with Altynai.';
   }
 
-  if (lowerMsg.includes('consult') || lowerMsg.includes('консультац') || lowerMsg.includes('записаться') || lowerMsg.includes('book')) {
+  // Booking / Consultation
+  if (/(consult|book|appointment|sign\s*up|enroll|register|записат|регистр|запис|консультац|хочу\s*(начать|записат|попасть)|как\s*(начать|записат|попасть))/i.test(lowerMsg)) {
     return useRu
-      ? 'Для бесплатной консультации отправьте: имя, email и телефон в международном формате (+код страны). Я сразу оформлю заявку.'
-      : 'To book a free consultation, please send your name, email, and phone in international format (+country code). I will create your request immediately.';
+      ? 'Чтобы записаться на бесплатную консультацию:\n\n1. Нажмите «Записаться на консультацию» на сайте\n2. Заполните имя, email и телефон\n3. Мы свяжемся с вами через WhatsApp или Telegram в течение 24 часов\n\nВход в индивидуальную работу только после бесплатной консультации — мы обеспечиваем правильный подбор.\n\nТакже можно написать нам напрямую в WhatsApp или Telegram!'
+      : 'To book a free consultation:\n\n1. Click "Book Free Consultation" on our website\n2. Fill in your name, email, and phone\n3. We\'ll contact you via WhatsApp or Telegram within 24 hours\n\nEntry to individual work is only after a free consultation — we ensure the right fit for both sides.\n\nYou can also message us directly on WhatsApp or Telegram!';
   }
 
-  if (lowerMsg.includes('altynai') || lowerMsg.includes('алтынай') || lowerMsg.includes('founder') || lowerMsg.includes('основатель')) {
+  // Founder
+  if (/(altynai|алтынай|эшинбеков|eshinbekov|founder|основател|кто\s*(вед[её]т|провод|автор)|who\s*(is|runs|leads|created))/i.test(lowerMsg)) {
     return useRu
-      ? 'Алтынай Ешинбекова — основатель KVANTUM. Фокус: работа с подсознанием, NLP-инструменты и трансформация состояния.'
-      : 'Altynai Eshinbekova is the founder of KVANTUM. Her focus includes subconscious work, NLP tools, and deep state transformation.';
+      ? 'Алтынай Эшинбекова — Основатель КВАНТУМ:\n\n• Специалист по работе с подсознанием и квантовым полем\n• Мастер НЛП\n• Мастер глубинных разборов\n• 500+ трансформированных клиентов\n• 5+ лет опыта\n\nЕё подход: глубокая, экологичная работа с реальными, измеримыми результатами. Лично сопровождает каждого клиента к его цели.\n\n«Вы в нужном месте и в нужное время.»'
+      : 'Altynai Eshinbekova — Founder of QUANTUM:\n\n• Specialist in subconscious and quantum field work\n• NLP Master practitioner\n• Master of deep analysis sessions\n• 500+ clients transformed\n• 5+ years of experience\n\nHer approach: deep, ecological work with real, measurable results. She personally accompanies each client to their goal.\n\n"You are in the right place at the right time."';
   }
 
-  if (lowerMsg.includes('whatsapp') || lowerMsg.includes('telegram') || lowerMsg.includes('contact') || lowerMsg.includes('связ') || lowerMsg.includes('контакт')) {
+  // Contact
+  if (/(whatsapp|telegram|instagram|youtube|contact|связ[аьи]|контакт|соц.*сет|social|написат|позвонит|reach|phone number|номер)/i.test(lowerMsg)) {
     return useRu
-      ? 'Связаться можно через WhatsApp и Telegram-кнопки на сайте, либо через заявку в форме/чате. Команда свяжется с вами после заявки.'
-      : 'You can contact us via the WhatsApp and Telegram buttons on the website, or leave a request in the form/chat. Our team will follow up.';
+      ? 'Как с нами связаться:\n\n• WhatsApp — нажмите кнопку WhatsApp на сайте\n• Telegram — нажмите кнопку Telegram\n• Instagram — подписывайтесь на обновления и контент\n• YouTube — смотрите бесплатные материалы и истории клиентов\n\nТакже можно заполнить форму на сайте — мы свяжемся в течение 24 часов.\n\nКакой способ связи предпочитаете? Мы подстроимся!'
+      : 'How to reach us:\n\n• WhatsApp — click the WhatsApp button on the website\n• Telegram — click the Telegram button\n• Instagram — follow us for updates & content\n• YouTube — watch free materials & client stories\n\nYou can also fill out the contact form on the website and we\'ll reach out to you within 24 hours.\n\nPreferred contact method? We\'ll adapt to you!';
   }
 
+  // Payment
+  if (/(pay|payment|оплат|заплатит|карт[аоу]|card|transfer|перевод|как\s*оплатит|how\s*to\s*pay|способ.*оплат|method.*pay|visa|mastercard|банк|bank)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Способы оплаты:\n\n• Банковская карта (Visa/MasterCard) через безопасную форму на сайте\n• Банковский перевод\n• Свяжитесь с нами для альтернативных способов\n\nОплата проходит безопасно. После оплаты вы получите подтверждение через WhatsApp/Telegram.\n\nЦены указаны в сомах (KGS), рублях или долларах в зависимости от программы. Помочь выбрать программу?'
+      : 'Payment methods:\n\n• Bank card (Visa/MasterCard) via our secure payment form\n• Bank transfer\n• Contact us for alternative methods\n\nPayments are processed securely. After payment, you\'ll receive confirmation via WhatsApp/Telegram.\n\nAll prices are listed in KGS (Kyrgyz Som), RUB, or USD depending on the program. Need help choosing a program?';
+  }
+
+  // Schedule
+  if (/(schedule|when|what time|timing|расписани|когда|во сколько|время|график|утр[оа]|вечер|session.*time|время.*сесси)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Расписание сессий:\n\n• Зарядка мозга: ежедневно в 6:00 утра (время КР, UTC+6)\n• Клуб «Ресурсы»: еженедельные сессии, расписание с группой\n• Интенсив и ПЕРЕЗАГРУЗКА: гибкий график, уроки доступны в любое время + живые Zoom по договорённости\n• Наставничество: индивидуальный график с Алтынай\n\nВсе живые сессии проходят онлайн через Zoom. Записи доступны, если пропустили.\n\nХотите узнать расписание конкретной программы?'
+      : 'Session schedule:\n\n• Brain Charge: daily at 6:00 AM (Kyrgyzstan time, UTC+6)\n• Club "Resources": weekly sessions, schedule set with your group\n• Intensive & REBOOT: flexible scheduling, lessons available anytime + live Zoom sessions by appointment\n• Mentorship: individual schedule agreed with Altynai\n\nAll live sessions are conducted online via Zoom. Recordings are available if you miss a session.\n\nWant to know the schedule for a specific program?';
+  }
+
+  // Format / How sessions work
+  if (/(how.*work|how.*session|format|online|offline|zoom|очно|онлайн|формат|как\s*проход|как\s*работа[ею]|дистанционн|in\s*person|face\s*to\s*face|лично)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Как проходят наши сессии:\n\n• Все программы проходят ОНЛАЙН — присоединиться можно из любой точки мира\n• Живые сессии через Zoom\n• Материалы курса доступны 24/7 в личном кабинете\n• Личная поддержка через WhatsApp/Telegram между сессиями\n• Индивидуальные сессии — 1 на 1 с Алтынай или куратором\n• Групповые сессии — маленькие группы для максимального внимания\n\nВам нужен только телефон или ноутбук и интернет. Всё создано для вашего комфорта и удобства.'
+      : 'How our sessions work:\n\n• All programs are conducted ONLINE — you can join from anywhere in the world\n• Live sessions via Zoom\n• Course materials available 24/7 in your personal account\n• Personal support via WhatsApp/Telegram between sessions\n• Individual sessions are 1-on-1 with Altynai or a curator\n• Group sessions are small groups for maximum attention\n\nYou only need a phone or laptop and internet connection. Everything is designed for your comfort and convenience.';
+  }
+
+  // Results / Testimonials
+  if (/(result|guarantee|outcome|эффект|результат|гаранти|помогает|помож|does it work|работает|поможет|что\s*дает|what.*get|what.*expect|чего\s*ожидат|отзыв|review|testimonial)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Каких результатов ожидать:\n\n• 500+ клиентов прошли трансформацию\n• 99% удовлетворённость клиентов\n• Средний рост в ключевых сферах в 3 раза\n\nРеальные результаты клиентов:\n— «Мой доход вырос в 2 раза в следующем месяце» — Айсулуу К.\n— «Я наконец чувствую контроль над своей жизнью» — Марат Б.\n— «Мой бизнес вырос в 3 раза за 6 месяцев» — Нуриза Т.\n\nМы работаем с реальными, измеримыми результатами. Каждый клиент получает личное внимание и поддержку до достижения цели.'
+      : 'What results can you expect:\n\n• 500+ clients have been transformed\n• 99% client satisfaction rate\n• Average 3x growth in key life areas\n\nReal client results:\n— "My income grew 2x in the following month" — Aisuluu K.\n— "I finally feel in control of my life" — Marat B.\n— "My business grew 3x in 6 months" — Nuriza T.\n\nWe work with real, measurable outcomes. Every client gets personal attention and support until they reach their goal.';
+  }
+
+  // Refund
+  if (/(refund|money\s*back|cancel|возврат|вернут.*деньг|отмен|отказат|деньги\s*назад|не\s*подо[йш]|not\s*right\s*for\s*me)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Политика возврата и отмены:\n\n• Мы проводим бесплатную первую консультацию именно для того, чтобы вы убедились, что программа вам подходит\n• Если программа не начнётся — полный возврат\n• Частичный возврат возможен в зависимости от программы и прогресса\n• Свяжитесь с нами через WhatsApp или Telegram для обсуждения вашей ситуации\n\nМы хотим, чтобы вы были уверены в своём вложении. Именно для этого есть бесплатная консультация — без давления, без обязательств.'
+      : 'Refund & cancellation policy:\n\n• We offer a free initial consultation specifically so you can make sure the program is right for you before committing\n• If a program doesn\'t start, you receive a full refund\n• Partial refund may be available depending on the program and progress\n• Contact us directly via WhatsApp or Telegram to discuss your individual situation\n\nWe want you to feel confident in your investment. That\'s why the free consultation exists — no pressure, no commitment until you\'re ready.';
+  }
+
+  // Location
+  if (/(where|location|city|country|office|locat|город|страна|где.*находит|где.*расположен|где.*офис|откуда|бишкек|bishkek|kyrgyzstan|кыргызстан|кирги|находит)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Расположение и охват:\n\n• Мы находимся в Бишкеке, Кыргызстан\n• Все программы полностью онлайн — клиенты присоединяются со всего мира\n• Сессии через Zoom, поддержка через WhatsApp/Telegram\n• Наши клиенты из Кыргызстана, России, Казахстана, Турции, Европы, США и других стран\n\nГде бы вы ни находились — вы можете участвовать в любой программе!'
+      : 'Location & reach:\n\n• We are based in Bishkek, Kyrgyzstan\n• All programs are fully online — clients join from all over the world\n• Sessions via Zoom, support via WhatsApp/Telegram\n• We have clients from Kyrgyzstan, Russia, Kazakhstan, Turkey, Europe, USA, and more\n\nNo matter where you are, you can participate in any of our programs!';
+  }
+
+  // Help choosing a program
+  if (/(which|what.*program|recommend|suggest|какую|какой|подскаж|что.*выбрат|порекоменд|посовет|не\s*знаю.*выбрат|help\s*me\s*choose|best.*for\s*me|что\s*подойд[её]т)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Помогу выбрать!\n\n• Только начинаете? → Зарядка мозга (1,000 сом) — 21 день для сдвига мышления\n• Хотите поддержку? → Клуб «Ресурсы» (5,000 сом/мес) — ежемесячная групповая работа\n• Проблемы с родителями/семьёй? → Интенсив «Папа, Мама» ($300) — глубокая проработка корней\n• Готовы к полной трансформации? → ПЕРЕЗАГРУЗКА ($1,000) — 8 недель полного обновления\n• Хотите стать практиком? → Наставничество — профессиональное мастерство\n\nЛучший способ найти своё — бесплатная консультация. Алтынай лично оценит вашу ситуацию и порекомендует путь. Хотите записаться?'
+      : 'Let me help you choose!\n\n• Just starting out? → Brain Charge (1,000 KGS) — 21 days to shift your thinking\n• Want ongoing support? → Club "Resources" (5,000 KGS/mo) — monthly group work\n• Issues with parents/family? → Intensive "Mom & Dad" ($300) — deep root work\n• Ready for full transformation? → REBOOT ($1,000) — 8-week total overhaul\n• Want to become a practitioner? → Mentorship — professional mastery\n\nThe best way to find your fit is a free consultation. Altynai will personally assess your situation and recommend the right path. Want to book one?';
+  }
+
+  // NLP / Methods
+  if (/(nlp|нлп|neuro.*linguistic|нейро.*лингвист|what.*method|метод|техник|подход|approach|technique)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Методы и техники, которые мы используем:\n\n• НЛП (Нейро-Лингвистическое Программирование) — перепрограммирование паттернов мышления\n• Работа с паттернами подсознания — выявление и снятие глубоких блоков\n• Техники квантового поля — выравнивание энергии и намерений\n• Основы расстановок — понимание семейных систем\n• Глубинные разборы — выявление первопричин\n\nВсе методы применяются экологично и безопасно, с учётом уникальной ситуации каждого клиента.'
+      : 'Methods & techniques we use:\n\n• NLP (Neuro-Linguistic Programming) — reprogramming thought patterns\n• Subconscious pattern work — identifying and releasing deep blocks\n• Quantum field techniques — energy alignment and intention setting\n• Constellation work fundamentals — understanding family systems\n• Deep analysis sessions — uncovering root causes\n\nAll methods are applied ecologically and safely, tailored to each client\'s unique situation.';
+  }
+
+  // Thanks
+  if (/(thank|thanks|спасибо|благодар|appreciate|thx)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Пожалуйста! Если у вас есть ещё вопросы — я всегда здесь. Также можно записаться на бесплатную консультацию — просто нажмите кнопку на сайте. Отличного дня!'
+      : 'You\'re welcome! If you have any more questions, I\'m here to help. You can also book a free consultation anytime — just click the button on the website. Have a wonderful day!';
+  }
+
+  // Bye
+  if (/(bye|goodbye|see you|до свидания|пока|до встречи|удачи|good\s*luck)/i.test(lowerMsg)) {
+    return useRu
+      ? 'Спасибо за общение! Помните, вы всегда можете вернуться или записаться на бесплатную консультацию, когда будете готовы. Желаем вам всего наилучшего на пути трансформации!'
+      : 'Thank you for chatting with us! Remember, you can always come back or book a free consultation when you\'re ready. Wishing you the best on your transformation journey!';
+  }
+
+  // Knowledge base fallback
   const section = pickKnowledgeSection(message, knowledgeText);
   const knowledgeReply = formatKnowledgeFallback(section, useRu);
   if (knowledgeReply) return knowledgeReply;
 
+  // General fallback
   return useRu
-    ? 'Могу помочь по темам KVANTUM: программы, цены, консультация и подбор формата. Напишите вашу цель, и я предложу лучший вариант.'
-    : 'I can help with KVANTUM topics: programs, pricing, consultation, and choosing the right format. Share your goal, and I will suggest the best option.';
+    ? 'Спасибо за сообщение! Я могу помочь вам с:\n\n• Информация о программах и ценах\n• Запись на бесплатную консультацию\n• Об основателе Алтынай\n• Как проходят сессии\n• Способы оплаты\n• Результаты и отзывы\n• Политика возврата\n\nПросто спросите о чём угодно или нажмите «Записаться» чтобы начать!'
+    : 'Thank you for your message! I can help you with:\n\n• Program information & pricing\n• Booking a free consultation\n• About founder Altynai\n• How sessions work\n• Payment methods\n• Results & testimonials\n• Refund policy\n\nJust ask me anything, or click "Book Consultation" to get started!';
 }
 
 function extractAssistantText(content) {
