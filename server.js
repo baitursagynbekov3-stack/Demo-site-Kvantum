@@ -5,6 +5,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
+const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = global.prisma || new PrismaClient();
@@ -14,20 +15,38 @@ if (process.env.NODE_ENV !== 'production') {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'change-this-to-a-long-random-string';
+
+const JWT_SECRET_RAW = String(process.env.JWT_SECRET || '').trim();
+if (!JWT_SECRET_RAW && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET is required in production');
+}
+const JWT_SECRET = JWT_SECRET_RAW || crypto.randomBytes(48).toString('hex');
+if (!JWT_SECRET_RAW) {
+  console.warn('[security] JWT_SECRET is not set; using ephemeral dev secret');
+}
+
 const SERVE_STATIC = process.env.SERVE_STATIC !== 'false';
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://baitursagynbekov3-stack.github.io',
+  'https://kvantum-api.vercel.app'
+];
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || DEFAULT_ALLOWED_ORIGINS.join(','))
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
+const ALLOWED_ORIGINS_SET = new Set(ALLOWED_ORIGINS);
+
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com')
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+
+const USER_ROLES = new Set(['user', 'admin']);
 const ALLOWED_BOOKING_STATUSES = new Set(['pending', 'new', 'in_progress', 'done', 'cancelled']);
 const CHAT_HISTORY_LIMIT = 12;
 const CHAT_DB_HISTORY_LIMIT = CHAT_HISTORY_LIMIT * 2;
@@ -36,7 +55,17 @@ const CHAT_SESSION_TTL_MS = 1000 * 60 * 60;
 const CHAT_SESSION_STATUSES = new Set(['open', 'collecting', 'booked', 'closed', 'spam']);
 const CHAT_KNOWLEDGE_CONTENT_TYPE = 'chatbot_kb';
 const KNOWLEDGE_CACHE_TTL_MS = 1000 * 60;
+
+const AUTH_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 30, message: 'Too many auth attempts. Please try later.' };
+const RESET_RATE_LIMIT = { windowMs: 15 * 60 * 1000, max: 10, message: 'Too many reset attempts. Please try later.' };
+const CHAT_RATE_LIMIT = { windowMs: 60 * 1000, max: 40, message: 'Too many chat requests. Slow down a bit.' };
+const RESET_CODE_TTL_MS = 10 * 60 * 1000;
+const RESET_CODE_MAX_ATTEMPTS = 5;
+const ALLOW_INSECURE_RESET_CODE_RESPONSE = String(process.env.ALLOW_INSECURE_RESET_CODE_RESPONSE || '').trim() === 'true';
+
 const chatSessions = new Map();
+const rateLimitBuckets = new Map();
+const passwordResetChallenges = new Map();
 
 const KNOWLEDGE_BASE_PATH = path.join(__dirname, 'data', 'chat-knowledge-base.md');
 
@@ -73,7 +102,7 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    if (ALLOWED_ORIGINS.length === 0 || ALLOWED_ORIGINS.includes(origin)) {
+    if (ALLOWED_ORIGINS_SET.has(origin)) {
       return callback(null, true);
     }
 
@@ -99,6 +128,161 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+function getClientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwarded || req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+function cleanupRateLimitBuckets(now) {
+  if (rateLimitBuckets.size < 5000) return;
+
+  for (const [key, bucket] of rateLimitBuckets.entries()) {
+    if (!bucket || now > bucket.resetAt) {
+      rateLimitBuckets.delete(key);
+    }
+  }
+}
+
+function createRateLimiter(config) {
+  const windowMs = Number(config.windowMs) || 60 * 1000;
+  const max = Number(config.max) || 20;
+  const message = String(config.message || 'Too many requests');
+  const prefix = String(config.prefix || 'global');
+
+  return (req, res, next) => {
+    const now = Date.now();
+    cleanupRateLimitBuckets(now);
+
+    const key = `${prefix}:${getClientIp(req)}`;
+    let bucket = rateLimitBuckets.get(key);
+
+    if (!bucket || now > bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateLimitBuckets.set(key, bucket);
+    }
+
+    bucket.count += 1;
+    const remaining = Math.max(0, max - bucket.count);
+    res.setHeader('X-RateLimit-Limit', String(max));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+
+    if (bucket.count > max) {
+      const retryAfterSec = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSec));
+      return res.status(429).json({ error: message });
+    }
+
+    return next();
+  };
+}
+
+const authRateLimiter = createRateLimiter({ ...AUTH_RATE_LIMIT, prefix: 'auth' });
+const resetRateLimiter = createRateLimiter({ ...RESET_RATE_LIMIT, prefix: 'reset' });
+const chatRateLimiter = createRateLimiter({ ...CHAT_RATE_LIMIT, prefix: 'chat' });
+
+function normalizeUserRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  return USER_ROLES.has(normalized) ? normalized : 'user';
+}
+
+async function syncAdminRolesFromEnv() {
+  if (!ADMIN_EMAILS.length) return;
+
+  await prisma.user.updateMany({
+    where: { email: { in: ADMIN_EMAILS } },
+    data: { role: 'admin' }
+  });
+}
+
+async function resolveUserRoleFromDb(user) {
+  if (!user) return 'user';
+
+  if (user.id) {
+    const byId = await prisma.user.findUnique({
+      where: { id: Number(user.id) },
+      select: { role: true, email: true }
+    });
+
+    if (byId) {
+      if (normalizeUserRole(byId.role) === 'admin') return 'admin';
+      if (isAdminEmail(byId.email)) return 'admin';
+      return 'user';
+    }
+  }
+
+  if (user.email) {
+    const byEmail = await prisma.user.findUnique({
+      where: { email: String(user.email).trim().toLowerCase() },
+      select: { role: true, email: true }
+    });
+
+    if (byEmail) {
+      if (normalizeUserRole(byEmail.role) === 'admin') return 'admin';
+      if (isAdminEmail(byEmail.email)) return 'admin';
+      return 'user';
+    }
+  }
+
+  return isAdminEmail(user.email) ? 'admin' : 'user';
+}
+
+function getResetChallengeKey(email, phone) {
+  return `${String(email || '').trim().toLowerCase()}|${normalizePhone(phone)}`;
+}
+
+function hashResetCode(code) {
+  return crypto.createHash('sha256').update(String(code || '')).digest('hex');
+}
+
+function generateResetCode() {
+  return String(crypto.randomInt(100000, 1000000));
+}
+
+function createResetChallenge(email, phone) {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedPhone = normalizePhone(phone);
+
+  if (!normalizedEmail || !normalizedPhone) {
+    return null;
+  }
+
+  const code = generateResetCode();
+  const challenge = {
+    codeHash: hashResetCode(code),
+    expiresAt: Date.now() + RESET_CODE_TTL_MS,
+    attemptsLeft: RESET_CODE_MAX_ATTEMPTS
+  };
+
+  passwordResetChallenges.set(getResetChallengeKey(normalizedEmail, normalizedPhone), challenge);
+  return code;
+}
+
+function validateResetCode(email, phone, code) {
+  const key = getResetChallengeKey(email, phone);
+  const challenge = passwordResetChallenges.get(key);
+
+  if (!challenge) return false;
+  if (Date.now() > challenge.expiresAt) {
+    passwordResetChallenges.delete(key);
+    return false;
+  }
+
+  if (challenge.attemptsLeft <= 0) {
+    passwordResetChallenges.delete(key);
+    return false;
+  }
+
+  challenge.attemptsLeft -= 1;
+
+  if (challenge.codeHash !== hashResetCode(code)) {
+    if (challenge.attemptsLeft <= 0) passwordResetChallenges.delete(key);
+    return false;
+  }
+
+  passwordResetChallenges.delete(key);
+  return true;
+}
+
 // Auth middleware
 function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -119,23 +303,35 @@ function isAdminEmail(email) {
 }
 
 function authenticateAdmin(req, res, next) {
-  return authenticateToken(req, res, () => {
-    if (ADMIN_EMAILS.length === 0) {
-      if (process.env.NODE_ENV !== 'production') return next();
-      return res.status(503).json({ error: 'Admin access is not configured' });
-    }
+  return authenticateToken(req, res, async () => {
+    try {
+      if (normalizeUserRole(req.user && req.user.role) === 'admin') {
+        return next();
+      }
 
-    if (!isAdminEmail(req.user && req.user.email)) {
+      const roleFromDb = await resolveUserRoleFromDb(req.user);
+      if (roleFromDb === 'admin') {
+        return next();
+      }
+
       return res.status(403).json({ error: 'Admin access required' });
+    } catch (err) {
+      return res.status(500).json({ error: 'Server error' });
     }
-
-    return next();
   });
 }
 
 function isValidEmail(email) {
   const normalizedEmail = (email || '').trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(normalizedEmail);
+}
+
+function isStrongPassword(password) {
+  const value = String(password || '');
+  if (value.length < 8) return false;
+  if (!/[a-z]/i.test(value)) return false;
+  if (!/\d/.test(value)) return false;
+  return true;
 }
 
 function normalizePhone(phone) {
@@ -891,8 +1087,25 @@ async function notifyLeadCreated(booking, source) {
   }
 }
 
+function buildAuthToken(user, role) {
+  return jwt.sign(
+    { id: user.id, email: user.email, name: user.name, role },
+    JWT_SECRET,
+    { expiresIn: '7d' }
+  );
+}
+
+function buildPublicUser(user, role) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role
+  };
+}
+
 // Register
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authRateLimiter, async (req, res) => {
   try {
     const { name, email, password, phone } = req.body;
     const normalizedEmail = (email || '').trim().toLowerCase();
@@ -906,8 +1119,8 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    if (String(password).length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!isStrongPassword(password)) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters and include letters and numbers' });
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -915,23 +1128,24 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'User already exists' });
     }
 
+    const role = isAdminEmail(normalizedEmail) ? 'admin' : 'user';
     const hashedPassword = await bcrypt.hash(String(password), 10);
     const user = await prisma.user.create({
       data: {
         name,
         email: normalizedEmail,
         password: hashedPassword,
-        phone: normalizedPhone
+        phone: normalizedPhone,
+        role
       }
     });
 
-    const role = isAdminEmail(normalizedEmail) ? 'admin' : 'user';
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
+    const token = buildAuthToken(user, role);
 
     res.json({
       message: 'Registration successful',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role }
+      user: buildPublicUser(user, role)
     });
   } catch (err) {
     if (err && err.code === 'P2002') {
@@ -942,7 +1156,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Login
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', authRateLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
     const normalizedEmail = (email || '').trim().toLowerCase();
@@ -957,46 +1171,121 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    const role = isAdminEmail(normalizedEmail) ? 'admin' : 'user';
-    const token = jwt.sign({ id: user.id, email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
+    let role = normalizeUserRole(user.role);
+    if (isAdminEmail(normalizedEmail)) {
+      role = 'admin';
+    }
+
+    if (role !== normalizeUserRole(user.role)) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role }
+      });
+    }
+
+    const token = buildAuthToken(user, role);
 
     res.json({
       message: 'Login successful',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role }
+      user: buildPublicUser(user, role)
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Reset password (email + phone verification)
-app.post('/api/reset-password', async (req, res) => {
+// Request reset code (email + phone verification)
+app.post('/api/reset-password/request-code', resetRateLimiter, async (req, res) => {
   try {
-    const { email, phone, newPassword } = req.body;
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const phone = normalizePhone(req.body.phone);
+
+    if (!email || !phone || !isValidEmail(email)) {
+      return res.status(400).json({ error: 'Valid email and phone are required' });
+    }
+
+    const genericMessage = 'If this account exists, verification code has been sent.';
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user || normalizePhone(user.phone) !== phone) {
+      return res.json({ message: genericMessage });
+    }
+
+    const resetCode = createResetChallenge(email, phone);
+    if (!resetCode) {
+      return res.status(500).json({ error: 'Failed to create reset code' });
+    }
+
+    let delivered = false;
+    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+      const note = [
+        'KVANTUM password reset verification code',
+        `Email: ${email}`,
+        `Phone: ${phone}`,
+        `Code: ${resetCode}`,
+        `Expires in: ${Math.floor(RESET_CODE_TTL_MS / 60000)} minutes`
+      ].join('\n');
+
+
+      try {
+        await sendTelegramText(note);
+        delivered = true;
+      } catch (err) {
+        delivered = false;
+      }
+    }
+
+    if (process.env.NODE_ENV !== 'production' || ALLOW_INSECURE_RESET_CODE_RESPONSE) {
+      return res.json({
+        message: 'Verification code generated',
+        devCode: resetCode,
+        expiresInSec: Math.floor(RESET_CODE_TTL_MS / 1000)
+      });
+    }
+
+    if (delivered) {
+      return res.json({ message: genericMessage });
+    }
+
+    return res.status(503).json({ error: 'Reset code delivery is not configured' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reset password (email + phone + verification code)
+app.post('/api/reset-password', resetRateLimiter, async (req, res) => {
+  try {
+    const { email, phone, newPassword, resetCode } = req.body;
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedPhone = normalizePhone(phone);
+    const normalizedResetCode = String(resetCode || '').trim();
 
-    if (!normalizedEmail || !normalizedPhone || !newPassword) {
-      return res.status(400).json({ error: 'Email, phone and new password are required' });
+    if (!normalizedEmail || !normalizedPhone || !newPassword || !normalizedResetCode) {
+      return res.status(400).json({ error: 'Email, phone, reset code and new password are required' });
     }
 
     if (!isValidEmail(normalizedEmail)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
-    if (String(newPassword).length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters and include letters and numbers' });
+    }
+
+    if (!validateResetCode(normalizedEmail, normalizedPhone, normalizedResetCode)) {
+      return res.status(400).json({ error: 'Invalid or expired verification code' });
     }
 
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (!user) {
-      return res.status(400).json({ error: 'Invalid email or phone' });
+      return res.status(400).json({ error: 'Invalid reset request' });
     }
 
     const storedPhone = normalizePhone(user.phone);
     if (!storedPhone || storedPhone !== normalizedPhone) {
-      return res.status(400).json({ error: 'Invalid email or phone' });
+      return res.status(400).json({ error: 'Invalid reset request' });
     }
 
     const hashedPassword = await bcrypt.hash(String(newPassword), 10);
@@ -1016,7 +1305,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, name: true, email: true, phone: true }
+      select: { id: true, name: true, email: true, phone: true, role: true }
     });
 
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -1689,7 +1978,7 @@ app.delete('/api/services/:id', authenticateAdmin, async (req, res) => {
 });
 
 // AI Chatbot endpoint
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', chatRateLimiter, async (req, res) => {
   try {
     const message = String(req.body.message || '').trim();
     const sessionId = normalizeSessionId(req.body.sessionId);
@@ -1856,13 +2145,16 @@ if (SERVE_STATIC) {
 
 let server;
 if (require.main === module) {
-  server = app.listen(PORT, () => {
-    console.log(`QUANTUM server running at http://localhost:${PORT}`);
-    if (ALLOWED_ORIGINS.length) {
-      console.log(`CORS enabled for: ${ALLOWED_ORIGINS.join(', ')}`);
-    } else {
-      console.log('CORS enabled for all origins (ALLOWED_ORIGINS is empty)');
+  server = app.listen(PORT, async () => {
+    try {
+      await syncAdminRolesFromEnv();
+    } catch (err) {
+      console.error('[startup] failed to sync admin roles:', err && err.message ? err.message : err);
     }
+
+    console.log(`QUANTUM server running at http://localhost:${PORT}`);
+    console.log(`CORS allowed origins: ${ALLOWED_ORIGINS.join(', ')}`);
+
     if (OPENAI_API_KEY) {
       console.log(`OpenAI chat enabled with model: ${OPENAI_MODEL}`);
     } else {

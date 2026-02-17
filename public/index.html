@@ -593,7 +593,7 @@
         </div>
         <div class="form-group">
           <label data-i18n="modal.password">Password</label>
-          <input type="password" name="password" data-i18n-placeholder="modal.create_pass_ph" placeholder="Create a password" required minlength="6">
+          <input type="password" name="password" data-i18n-placeholder="modal.create_pass_ph" placeholder="Create a password" required minlength="8">
         </div>
         <button type="submit" class="btn btn-primary btn-block" data-i18n="modal.register">Register</button>
         <p class="form-note" data-i18n-html="modal.has_account">Already have an account? <a href="#" onclick="switchTab('login')">Login here</a></p>
@@ -636,12 +636,19 @@
           </div>
         </div>
         <div class="form-group">
+          <label>Verification code</label>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" name="resetCode" placeholder="6-digit code" minlength="6" maxlength="6" required style="flex:1;">
+            <button type="button" class="btn btn-secondary" onclick="requestPasswordResetCode()" style="padding:10px 14px; white-space:nowrap;">Send code</button>
+          </div>
+        </div>
+        <div class="form-group">
           <label data-i18n="reset.new_password">New password</label>
-          <input type="password" name="newPassword" data-i18n-placeholder="reset.new_password_ph" placeholder="Minimum 6 characters" minlength="6" required>
+          <input type="password" name="newPassword" data-i18n-placeholder="reset.new_password_ph" placeholder="Minimum 8 characters" minlength="8" required>
         </div>
         <div class="form-group">
           <label data-i18n="reset.confirm_password">Confirm new password</label>
-          <input type="password" name="confirmPassword" data-i18n-placeholder="reset.confirm_password_ph" placeholder="Repeat password" minlength="6" required>
+          <input type="password" name="confirmPassword" data-i18n-placeholder="reset.confirm_password_ph" placeholder="Repeat password" minlength="8" required>
         </div>
         <button type="submit" class="btn btn-primary btn-block" data-i18n="reset.submit">Reset Password</button>
         <p class="form-note"><a href="#" onclick="closeModal('resetModal'); openModal('loginModal'); switchTab('login'); return false;" data-i18n="reset.back_login">Back to login</a></p>

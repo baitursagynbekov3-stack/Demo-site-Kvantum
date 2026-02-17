@@ -116,6 +116,11 @@ function isValidEmail(value) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
 }
 
+function isStrongPassword(value) {
+  const password = String(value || '');
+  return password.length >= 8 && /[a-z]/i.test(password) && /\d/.test(password);
+}
+
 function normalizePhone(value, countryCode) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -206,8 +211,8 @@ function demoApi(path, options) {
       return createApiResponse(400, { error: 'Invalid email format' });
     }
 
-    if (String(password).length < 6) {
-      return createApiResponse(400, { error: 'Password must be at least 6 characters' });
+    if (!isStrongPassword(password)) {
+      return createApiResponse(400, { error: 'Password must be at least 8 characters and include letters and numbers' });
     }
 
     const users = getStorageArray(usersKey);
@@ -256,17 +261,59 @@ function demoApi(path, options) {
     });
   }
 
+  if (path === '/api/reset-password/request-code') {
+    const email = (body.email || '').trim().toLowerCase();
+    const phone = normalizePhone(body.phone);
+
+    if (!email || !phone || !isValidEmail(email)) {
+      return createApiResponse(400, { error: 'Valid email and phone are required' });
+    }
+
+    const users = getStorageArray(usersKey);
+    const user = users.find((u) => u.email === email && normalizePhone(u.phone) === phone);
+    const generic = { message: 'If this account exists, verification code has been sent. (demo mode)' };
+
+    if (!user) {
+      return createApiResponse(200, generic);
+    }
+
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const key = email + '|' + phone;
+
+    let challenges = {};
+    try {
+      const raw = localStorage.getItem('quantum_demo_reset_codes');
+      challenges = raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      challenges = {};
+    }
+
+    challenges[key] = {
+      code,
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      attemptsLeft: 5
+    };
+    localStorage.setItem('quantum_demo_reset_codes', JSON.stringify(challenges));
+
+    return createApiResponse(200, {
+      message: 'Verification code generated (demo mode)',
+      devCode: code,
+      expiresInSec: 600
+    });
+  }
+
   if (path === '/api/reset-password') {
     const email = (body.email || '').trim().toLowerCase();
     const phone = normalizePhone(body.phone);
     const newPassword = body.newPassword || '';
+    const resetCode = String(body.resetCode || '').trim();
 
-    if (!email || !phone || !newPassword) {
-      return createApiResponse(400, { error: 'Email, phone and new password are required' });
+    if (!email || !phone || !newPassword || !resetCode) {
+      return createApiResponse(400, { error: 'Email, phone, reset code and new password are required' });
     }
 
-    if (String(newPassword).length < 6) {
-      return createApiResponse(400, { error: 'Password must be at least 6 characters' });
+    if (String(newPassword).length < 8 || !/[a-z]/i.test(newPassword) || !/\d/.test(newPassword)) {
+      return createApiResponse(400, { error: 'Password must be at least 8 characters and include letters and numbers' });
     }
 
     const users = getStorageArray(usersKey);
@@ -276,8 +323,39 @@ function demoApi(path, options) {
     });
 
     if (index === -1) {
-      return createApiResponse(400, { error: 'Invalid email or phone' });
+      return createApiResponse(400, { error: 'Invalid reset request' });
     }
+
+    let challenges = {};
+    try {
+      const raw = localStorage.getItem('quantum_demo_reset_codes');
+      challenges = raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      challenges = {};
+    }
+
+    const key = email + '|' + phone;
+    const challenge = challenges[key];
+
+    if (!challenge || Date.now() > Number(challenge.expiresAt || 0)) {
+      delete challenges[key];
+      localStorage.setItem('quantum_demo_reset_codes', JSON.stringify(challenges));
+      return createApiResponse(400, { error: 'Invalid or expired verification code' });
+    }
+
+    challenge.attemptsLeft = Number(challenge.attemptsLeft || 0) - 1;
+    if (challenge.code !== resetCode) {
+      if (challenge.attemptsLeft <= 0) {
+        delete challenges[key];
+      } else {
+        challenges[key] = challenge;
+      }
+      localStorage.setItem('quantum_demo_reset_codes', JSON.stringify(challenges));
+      return createApiResponse(400, { error: 'Invalid or expired verification code' });
+    }
+
+    delete challenges[key];
+    localStorage.setItem('quantum_demo_reset_codes', JSON.stringify(challenges));
 
     users[index].password = String(newPassword);
     setStorageArray(usersKey, users);
@@ -696,7 +774,7 @@ const translations = {
     'reset.email': 'Email',
     'reset.phone': 'Телефон из регистрации',
     'reset.new_password': 'Новый пароль',
-    'reset.new_password_ph': 'Минимум 6 символов',
+    'reset.new_password_ph': 'Минимум 8 символов',
     'reset.confirm_password': 'Повторите новый пароль',
     'reset.confirm_password_ph': 'Повторите пароль',
     'reset.submit': 'Сбросить пароль',
@@ -1130,6 +1208,11 @@ async function handleRegister(e) {
     return;
   }
 
+  if (!isStrongPassword(form.password.value)) {
+    showToast(currentLang === 'ru' ? 'Пароль: минимум 8 символов, буквы и цифры.' : 'Password must be at least 8 characters and include letters and numbers.', 'error');
+    return;
+  }
+
   const data = {
     name: form.name.value,
     email: normalizedEmail,
@@ -1168,14 +1251,69 @@ function openResetModal() {
   openModal('resetModal');
 }
 
+async function requestPasswordResetCode() {
+  const form = document.getElementById('resetForm');
+  if (!form) return;
+
+  const email = String(form.email.value || '').trim().toLowerCase();
+  const countryCode = form.countryCode ? form.countryCode.value : '+996';
+  const normalizedPhone = normalizePhone(form.phone.value, countryCode);
+
+  if (!isValidEmail(email)) {
+    showToast(currentLang === 'ru' ? 'Введите корректный email.' : 'Please enter a valid email.', 'error');
+    return;
+  }
+
+  if (!normalizedPhone) {
+    showToast(currentLang === 'ru' ? 'Введите корректный номер телефона.' : 'Please enter a valid phone number.', 'error');
+    return;
+  }
+
+  try {
+    const res = await apiFetch('/api/reset-password/request-code', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, phone: normalizedPhone })
+    });
+
+    const result = await res.json();
+    if (!res.ok) {
+      showToast(result.error || (currentLang === 'ru' ? 'Не удалось отправить код.' : 'Failed to send verification code.'), 'error');
+      return;
+    }
+
+    if (result.devCode) {
+      const resetCodeInput = form.resetCode;
+      if (resetCodeInput) resetCodeInput.value = result.devCode;
+      showToast((currentLang === 'ru' ? 'Код получен (dev): ' : 'Verification code (dev): ') + result.devCode, 'info');
+      return;
+    }
+
+    showToast(currentLang === 'ru' ? 'Код подтверждения отправлен.' : 'Verification code sent.', 'success');
+  } catch (err) {
+    showToast(currentLang === 'ru' ? 'Ошибка соединения. Попробуйте снова.' : 'Connection error. Please try again.', 'error');
+  }
+}
+
 async function handlePasswordReset(e) {
   e.preventDefault();
   const form = e.target;
   const newPassword = form.newPassword.value;
   const confirmPassword = form.confirmPassword.value;
+  const resetCode = String(form.resetCode ? form.resetCode.value : '').trim();
 
   if (newPassword !== confirmPassword) {
     showToast(currentLang === 'ru' ? 'Пароли не совпадают.' : 'Passwords do not match.', 'error');
+    return;
+  }
+
+  if (!isStrongPassword(newPassword)) {
+    showToast(currentLang === 'ru' ? 'Пароль: минимум 8 символов, буквы и цифры.' : 'Password must be at least 8 characters and include letters and numbers.', 'error');
+    return;
+  }
+
+  if (!resetCode) {
+    showToast(currentLang === 'ru' ? 'Введите код подтверждения.' : 'Enter verification code.', 'error');
     return;
   }
 
@@ -1189,7 +1327,8 @@ async function handlePasswordReset(e) {
   const data = {
     email: form.email.value,
     phone: normalizedPhone,
-    newPassword
+    newPassword,
+    resetCode
   };
 
   try {
