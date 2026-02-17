@@ -670,7 +670,10 @@ function pickKnowledgeSection(message, knowledgeText) {
     }
   }
 
-  return bestScore > 0 ? bestSection : null;
+  if (bestScore > 0) return bestSection;
+
+  const fallbackSection = sections.find((section) => /brand|program|consultation|communication/i.test(String(section.title || '')));
+  return fallbackSection || sections[0] || null;
 }
 
 function formatKnowledgeFallback(section, useRu) {
