@@ -52,3 +52,35 @@ model Content {
 
   @@index([type])
 }
+
+model ChatSession {
+  id          Int           @id @default(autoincrement())
+  sessionId   String        @unique
+  locale      String?
+  leadName    String?
+  leadEmail   String?
+  leadPhone   String?
+  leadService String?
+  leadMessage String?
+  leadStatus  String        @default("open")
+  bookingId   Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  messages    ChatMessage[]
+
+  @@index([updatedAt])
+  @@index([leadStatus])
+  @@index([leadEmail])
+  @@index([leadPhone])
+}
+
+model ChatMessage {
+  id            Int         @id @default(autoincrement())
+  chatSessionId Int
+  role          String
+  content       String
+  createdAt     DateTime    @default(now())
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+
+  @@index([chatSessionId, createdAt])
+}

@@ -30,8 +30,12 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com')
   .filter(Boolean);
 const ALLOWED_BOOKING_STATUSES = new Set(['pending', 'new', 'in_progress', 'done', 'cancelled']);
 const CHAT_HISTORY_LIMIT = 12;
+const CHAT_DB_HISTORY_LIMIT = CHAT_HISTORY_LIMIT * 2;
 const CHAT_SESSIONS_LIMIT = 300;
 const CHAT_SESSION_TTL_MS = 1000 * 60 * 60;
+const CHAT_SESSION_STATUSES = new Set(['open', 'collecting', 'booked', 'closed', 'spam']);
+const CHAT_KNOWLEDGE_CONTENT_TYPE = 'chatbot_kb';
+const KNOWLEDGE_CACHE_TTL_MS = 1000 * 60;
 const chatSessions = new Map();
 
 const KNOWLEDGE_BASE_PATH = path.join(__dirname, 'data', 'chat-knowledge-base.md');
@@ -54,8 +58,8 @@ const KVANTUM_SYSTEM_PROMPT_BASE = [
   'When a user is ready to leave a request, collect exactly these fields: name, email, phone (+country code), and optional service/message.'
 ].join('\n');
 
-const KVANTUM_KNOWLEDGE_BASE = loadKnowledgeBase();
-const KVANTUM_SYSTEM_PROMPT = buildSystemPrompt();
+let knowledgeBaseCache = loadKnowledgeBaseFromFile();
+let knowledgeBaseCacheUpdatedAt = Date.now();
 
 const LOCAL_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
 
@@ -152,29 +156,98 @@ function normalizePhone(phone) {
   return '+' + digits;
 }
 
-function loadKnowledgeBase() {
-  try {
-    const content = fs.readFileSync(KNOWLEDGE_BASE_PATH, 'utf8').trim();
-    if (!content) return '';
+function normalizeKnowledgeText(value) {
+  return String(value || '').trim().slice(0, 12000);
+}
 
-    // Keep prompt size predictable for API requests.
-    return content.slice(0, 12000);
+function loadKnowledgeBaseFromFile() {
+  try {
+    const content = fs.readFileSync(KNOWLEDGE_BASE_PATH, 'utf8');
+    return normalizeKnowledgeText(content);
   } catch (err) {
     if (err && err.code !== 'ENOENT') {
-      console.error('[chat] Failed to load knowledge base:', err.message || err);
+      console.error('[chat] Failed to load knowledge base file:', err.message || err);
     }
     return '';
   }
 }
 
-function buildSystemPrompt() {
-  if (!KVANTUM_KNOWLEDGE_BASE) return KVANTUM_SYSTEM_PROMPT_BASE;
+function buildSystemPrompt(knowledgeText) {
+  if (!knowledgeText) return KVANTUM_SYSTEM_PROMPT_BASE;
 
   return [
     KVANTUM_SYSTEM_PROMPT_BASE,
     'Use the following website knowledge base as ground truth for facts and wording priorities.',
-    KVANTUM_KNOWLEDGE_BASE
+    knowledgeText
   ].join('\n\n');
+}
+
+async function getKnowledgeBaseText(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && knowledgeBaseCache && now - knowledgeBaseCacheUpdatedAt < KNOWLEDGE_CACHE_TTL_MS) {
+    return knowledgeBaseCache;
+  }
+
+  const fallback = normalizeKnowledgeText(knowledgeBaseCache || loadKnowledgeBaseFromFile());
+
+  try {
+    const item = await prisma.content.findFirst({
+      where: { type: CHAT_KNOWLEDGE_CONTENT_TYPE },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    if (item && item.data && typeof item.data === 'object' && !Array.isArray(item.data)) {
+      const dbText = normalizeKnowledgeText(item.data.text);
+      if (dbText) {
+        knowledgeBaseCache = dbText;
+        knowledgeBaseCacheUpdatedAt = now;
+        return knowledgeBaseCache;
+      }
+    }
+  } catch (err) {
+    console.error('[chat] Failed to load knowledge base from DB:', err.message || err);
+  }
+
+  knowledgeBaseCache = fallback;
+  knowledgeBaseCacheUpdatedAt = now;
+  return knowledgeBaseCache;
+}
+
+async function setKnowledgeBaseText(nextText) {
+  const text = normalizeKnowledgeText(nextText);
+
+  const existing = await prisma.content.findFirst({
+    where: { type: CHAT_KNOWLEDGE_CONTENT_TYPE },
+    orderBy: { updatedAt: 'desc' }
+  });
+
+  if (existing) {
+    await prisma.content.update({
+      where: { id: existing.id },
+      data: { data: { text }, sortOrder: 0 }
+    });
+
+    knowledgeBaseCache = text || loadKnowledgeBaseFromFile();
+    knowledgeBaseCacheUpdatedAt = Date.now();
+    return knowledgeBaseCache;
+  }
+
+  await prisma.content.create({
+    data: {
+      type: CHAT_KNOWLEDGE_CONTENT_TYPE,
+      sortOrder: 0,
+      data: { text }
+    }
+  });
+
+  knowledgeBaseCache = text || loadKnowledgeBaseFromFile();
+  knowledgeBaseCacheUpdatedAt = Date.now();
+  return knowledgeBaseCache;
+}
+
+async function getSystemPrompt() {
+  const knowledgeText = await getKnowledgeBaseText();
+  return buildSystemPrompt(knowledgeText);
 }
 
 function normalizeName(name) {
@@ -247,6 +320,115 @@ function appendChatHistory(session, role, content) {
   }
 
   session.updatedAt = Date.now();
+}
+
+function leadDraftFromChatSession(record) {
+  if (!record) return createEmptyLeadDraft();
+
+  return {
+    name: String(record.leadName || '').trim(),
+    email: String(record.leadEmail || '').trim().toLowerCase(),
+    phone: normalizePhone(record.leadPhone || ''),
+    service: String(record.leadService || '').trim(),
+    message: String(record.leadMessage || '').trim()
+  };
+}
+
+async function ensureChatSessionRecord(sessionId, locale) {
+  if (!sessionId) return null;
+
+  return prisma.chatSession.upsert({
+    where: { sessionId },
+    update: { locale: locale || null },
+    create: { sessionId, locale: locale || null },
+    select: {
+      id: true,
+      sessionId: true,
+      locale: true,
+      leadName: true,
+      leadEmail: true,
+      leadPhone: true,
+      leadService: true,
+      leadMessage: true,
+      leadStatus: true,
+      bookingId: true,
+      updatedAt: true
+    }
+  });
+}
+
+async function hydrateMemoryChatSession(session, chatSessionRecord) {
+  if (!session || !chatSessionRecord) return;
+
+  if (session.history.length === 0) {
+    const dbMessages = await prisma.chatMessage.findMany({
+      where: { chatSessionId: chatSessionRecord.id },
+      orderBy: { createdAt: 'desc' },
+      take: CHAT_DB_HISTORY_LIMIT,
+      select: { role: true, content: true }
+    });
+
+    session.history = dbMessages
+      .slice()
+      .reverse()
+      .map((message) => ({ role: message.role, content: String(message.content || '') }));
+  }
+
+  // Restore draft only while lead collection is in progress.
+  if (chatSessionRecord.leadStatus === 'collecting') {
+    const dbLead = leadDraftFromChatSession(chatSessionRecord);
+    session.leadDraft = mergeLeadDraft(dbLead, session.leadDraft);
+  } else if (hasLeadData(session.leadDraft)) {
+    session.leadDraft = createEmptyLeadDraft();
+  }
+  session.updatedAt = Date.now();
+}
+
+async function saveChatMessageRecord(chatSessionId, role, content) {
+  if (!chatSessionId || !content) return;
+
+  await prisma.chatMessage.create({
+    data: {
+      chatSessionId,
+      role,
+      content: String(content).slice(0, 3000)
+    }
+  });
+}
+
+async function persistChatLeadDraft(chatSessionId, leadDraft, leadStatus) {
+  if (!chatSessionId || !leadDraft) return;
+
+  const nextStatus = CHAT_SESSION_STATUSES.has(leadStatus) ? leadStatus : undefined;
+
+  await prisma.chatSession.update({
+    where: { id: chatSessionId },
+    data: {
+      leadName: leadDraft.name || null,
+      leadEmail: leadDraft.email || null,
+      leadPhone: leadDraft.phone || null,
+      leadService: leadDraft.service || null,
+      leadMessage: leadDraft.message || null,
+      ...(nextStatus ? { leadStatus: nextStatus } : {})
+    }
+  });
+}
+
+async function markChatSessionBooked(chatSessionId, bookingId, leadDraft) {
+  if (!chatSessionId || !bookingId) return;
+
+  await prisma.chatSession.update({
+    where: { id: chatSessionId },
+    data: {
+      bookingId,
+      leadStatus: 'booked',
+      leadName: leadDraft && leadDraft.name ? leadDraft.name : null,
+      leadEmail: leadDraft && leadDraft.email ? leadDraft.email : null,
+      leadPhone: leadDraft && leadDraft.phone ? leadDraft.phone : null,
+      leadService: leadDraft && leadDraft.service ? leadDraft.service : null,
+      leadMessage: leadDraft && leadDraft.message ? leadDraft.message : null
+    }
+  });
 }
 
 function isRussianText(text) {
@@ -473,8 +655,9 @@ function extractAssistantText(content) {
 async function getOpenAIReply(message, history) {
   if (!OPENAI_API_KEY) return '';
 
+  const systemPrompt = await getSystemPrompt();
   const messages = [
-    { role: 'system', content: KVANTUM_SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt },
     ...history.slice(-CHAT_HISTORY_LIMIT),
     { role: 'user', content: String(message || '').trim() }
   ];
@@ -958,6 +1141,266 @@ app.get('/api/admin/check', authenticateAdmin, (req, res) => {
   res.json({ isAdmin: true });
 });
 
+// Admin leads list (bookings with search and status filter)
+app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
+  try {
+    const limitRaw = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 500) : 200;
+    const status = String(req.query.status || '').trim().toLowerCase();
+    const search = String(req.query.search || '').trim();
+
+    const where = {};
+
+    if (status && status !== 'all') {
+      if (!ALLOWED_BOOKING_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Invalid booking status' });
+      }
+      where.status = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { service: { contains: search, mode: 'insensitive' } },
+        { message: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    const leads = await prisma.booking.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        service: true,
+        status: true,
+        message: true,
+        createdAt: true
+      }
+    });
+
+    res.json({ leads });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin chat sessions list
+app.get('/api/admin/chats', authenticateAdmin, async (req, res) => {
+  try {
+    const limitRaw = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 300) : 100;
+    const status = String(req.query.status || '').trim().toLowerCase();
+    const search = String(req.query.search || '').trim();
+
+    const where = {};
+
+    if (status && status !== 'all') {
+      if (!CHAT_SESSION_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Invalid chat status' });
+      }
+      where.leadStatus = status;
+    }
+
+    if (search) {
+      where.OR = [
+        { sessionId: { contains: search, mode: 'insensitive' } },
+        { leadName: { contains: search, mode: 'insensitive' } },
+        { leadEmail: { contains: search, mode: 'insensitive' } },
+        { leadPhone: { contains: search, mode: 'insensitive' } },
+        { leadService: { contains: search, mode: 'insensitive' } },
+        { leadMessage: { contains: search, mode: 'insensitive' } },
+        { messages: { some: { content: { contains: search, mode: 'insensitive' } } } }
+      ];
+    }
+
+    const chatRows = await prisma.chatSession.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        sessionId: true,
+        locale: true,
+        leadName: true,
+        leadEmail: true,
+        leadPhone: true,
+        leadService: true,
+        leadMessage: true,
+        leadStatus: true,
+        bookingId: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { messages: true } },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            role: true,
+            content: true,
+            createdAt: true
+          }
+        }
+      }
+    });
+
+    const chats = chatRows.map((row) => ({
+      id: row.id,
+      sessionId: row.sessionId,
+      locale: row.locale,
+      leadStatus: row.leadStatus,
+      lead: {
+        name: row.leadName,
+        email: row.leadEmail,
+        phone: row.leadPhone,
+        service: row.leadService,
+        message: row.leadMessage
+      },
+      bookingId: row.bookingId,
+      messageCount: row._count.messages,
+      lastMessage: row.messages[0] || null,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    }));
+
+    res.json({ chats });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin chat messages by chat session id
+app.get('/api/admin/chats/:id/messages', authenticateAdmin, async (req, res) => {
+  try {
+    const chatId = parseInt(req.params.id, 10);
+    const limitRaw = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 1000) : 200;
+
+    if (!Number.isInteger(chatId) || chatId <= 0) {
+      return res.status(400).json({ error: 'Invalid chat id' });
+    }
+
+    const chat = await prisma.chatSession.findUnique({
+      where: { id: chatId },
+      select: {
+        id: true,
+        sessionId: true,
+        locale: true,
+        leadStatus: true,
+        leadName: true,
+        leadEmail: true,
+        leadPhone: true,
+        leadService: true,
+        leadMessage: true,
+        bookingId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    const rows = await prisma.chatMessage.findMany({
+      where: { chatSessionId: chatId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        createdAt: true
+      }
+    });
+
+    const messages = rows.slice().reverse();
+
+    res.json({ chat, messages });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin chat status update
+app.patch('/api/admin/chats/:id/status', authenticateAdmin, async (req, res) => {
+  try {
+    const chatId = parseInt(req.params.id, 10);
+    const status = String(req.body.status || '').trim().toLowerCase();
+
+    if (!Number.isInteger(chatId) || chatId <= 0) {
+      return res.status(400).json({ error: 'Invalid chat id' });
+    }
+
+    if (!CHAT_SESSION_STATUSES.has(status)) {
+      return res.status(400).json({ error: 'Invalid chat status' });
+    }
+
+    const updated = await prisma.chatSession.update({
+      where: { id: chatId },
+      data: { leadStatus: status },
+      select: {
+        id: true,
+        sessionId: true,
+        leadStatus: true,
+        updatedAt: true
+      }
+    });
+
+    res.json({ message: 'Chat status updated', chat: updated });
+  } catch (err) {
+    if (err && err.code === 'P2025') {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Admin chatbot knowledge base editor
+app.get('/api/admin/chatbot-knowledge', authenticateAdmin, async (req, res) => {
+  try {
+    const fallback = loadKnowledgeBaseFromFile();
+    const item = await prisma.content.findFirst({
+      where: { type: CHAT_KNOWLEDGE_CONTENT_TYPE },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    const dbText = item && item.data && typeof item.data === 'object' && !Array.isArray(item.data)
+      ? normalizeKnowledgeText(item.data.text)
+      : '';
+
+    const text = dbText || fallback;
+    knowledgeBaseCache = text;
+    knowledgeBaseCacheUpdatedAt = Date.now();
+
+    res.json({
+      text,
+      source: dbText ? 'database' : 'file'
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/admin/chatbot-knowledge', authenticateAdmin, async (req, res) => {
+  try {
+    const text = typeof req.body.text === 'string' ? req.body.text : '';
+    const savedText = await setKnowledgeBaseText(text);
+
+    res.json({
+      message: 'Chatbot knowledge base saved',
+      text: savedText
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Admin content CRUD (generic for testimonials, programs, services)
 function registerContentCrud(contentType, routePrefix) {
   app.get(routePrefix, authenticateAdmin, async (req, res) => {
@@ -1111,14 +1554,29 @@ app.post('/api/chat', async (req, res) => {
     }
 
     cleanupChatSessions();
-    const session = getChatSession(sessionId);
+
     const useRu = isRussianText(message);
+    const session = getChatSession(sessionId);
+    const chatSessionRecord = await ensureChatSessionRecord(sessionId, useRu ? 'ru' : 'en');
+
+    if (session && chatSessionRecord) {
+      await hydrateMemoryChatSession(session, chatSessionRecord);
+    }
+
+    const persistedLeadDraft = chatSessionRecord && chatSessionRecord.leadStatus === 'collecting'
+      ? leadDraftFromChatSession(chatSessionRecord)
+      : null;
+
+    const currentLeadDraft = mergeLeadDraft(
+      persistedLeadDraft,
+      session ? session.leadDraft : null
+    );
 
     const extractedLead = extractLeadFromText(message);
     const consultIntent = hasConsultationIntent(message);
 
-    if (consultIntent || hasLeadData(extractedLead) || hasLeadData(session && session.leadDraft)) {
-      const mergedLead = mergeLeadDraft(session ? session.leadDraft : null, extractedLead);
+    if (consultIntent || hasLeadData(extractedLead) || hasLeadData(currentLeadDraft)) {
+      const mergedLead = mergeLeadDraft(currentLeadDraft, extractedLead);
       if (!mergedLead.service) {
         mergedLead.service = detectServiceFromText(message) || 'chat-consultation';
       }
@@ -1131,8 +1589,10 @@ app.post('/api/chat', async (req, res) => {
         session.leadDraft = mergedLead;
       }
 
-      const missing = getMissingLeadFields(mergedLead);
       appendChatHistory(session, 'user', message);
+      await saveChatMessageRecord(chatSessionRecord && chatSessionRecord.id, 'user', message);
+
+      const missing = getMissingLeadFields(mergedLead);
 
       if (missing.length === 0) {
         const booking = await prisma.booking.create({
@@ -1152,11 +1612,14 @@ app.post('/api/chat', async (req, res) => {
           session.leadDraft = createEmptyLeadDraft();
         }
 
+        await markChatSessionBooked(chatSessionRecord && chatSessionRecord.id, booking.id, mergedLead);
+
         const reply = useRu
           ? `Готово! Я записал вас на консультацию. Номер заявки: #${booking.id}. Мы свяжемся с вами в WhatsApp/Telegram.`
           : `Done! Your consultation request is created. Booking ID: #${booking.id}. Our team will contact you via WhatsApp/Telegram.`;
 
         appendChatHistory(session, 'assistant', reply);
+        await saveChatMessageRecord(chatSessionRecord && chatSessionRecord.id, 'assistant', reply);
 
         return res.json({
           reply,
@@ -1167,12 +1630,16 @@ app.post('/api/chat', async (req, res) => {
         });
       }
 
+      await persistChatLeadDraft(chatSessionRecord && chatSessionRecord.id, mergedLead, 'collecting');
+
       const missingText = missingFieldsText(missing, useRu);
       const reply = useRu
         ? `Чтобы записать вас из чата, пришлите недостающие данные: ${missingText}. Можно одним сообщением в формате: Имя, Email, Телефон (+код страны).`
         : `To book from chat, please send missing details: ${missingText}. You can send all in one message: Name, Email, Phone (+country code).`;
 
       appendChatHistory(session, 'assistant', reply);
+      await saveChatMessageRecord(chatSessionRecord && chatSessionRecord.id, 'assistant', reply);
+
       return res.json({ reply, missingFields: missing });
     }
 
@@ -1191,6 +1658,9 @@ app.post('/api/chat', async (req, res) => {
 
     appendChatHistory(session, 'user', message);
     appendChatHistory(session, 'assistant', reply);
+
+    await saveChatMessageRecord(chatSessionRecord && chatSessionRecord.id, 'user', message);
+    await saveChatMessageRecord(chatSessionRecord && chatSessionRecord.id, 'assistant', reply);
 
     return res.json({ reply });
   } catch (err) {
@@ -1253,8 +1723,8 @@ if (require.main === module) {
       console.log('OpenAI chat disabled (OPENAI_API_KEY is not set); using fallback bot logic');
     }
 
-    if (KVANTUM_KNOWLEDGE_BASE) {
-      console.log('Chat knowledge base loaded: data/chat-knowledge-base.md');
+    if (knowledgeBaseCache) {
+      console.log('Chat knowledge base loaded (file/database)');
     } else {
       console.log('Chat knowledge base not found; using built-in prompt only');
     }

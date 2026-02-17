@@ -136,6 +136,134 @@
     .features-preview { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
     .features-preview span { background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #888; }
 
+    /* Data panels */
+    .admin-panel {
+      background: #151515;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .admin-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 14px;
+      align-items: center;
+    }
+    .admin-toolbar input,
+    .admin-toolbar select {
+      min-width: 180px;
+      background: #0f0f0f;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #e0e0e0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+    .admin-list {
+      display: grid;
+      gap: 10px;
+    }
+    .admin-list-item {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 12px;
+      background: #111;
+    }
+    .admin-list-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .admin-list-head strong {
+      color: #fff;
+      font-size: 14px;
+    }
+    .admin-meta {
+      font-size: 12px;
+      color: #999;
+      line-height: 1.5;
+      margin-bottom: 8px;
+      white-space: pre-line;
+    }
+    .status-pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      color: #ccc;
+    }
+    .status-pill.pending, .status-pill.open, .status-pill.collecting {
+      color: #fbbf24;
+      border-color: rgba(251,191,36,0.35);
+      background: rgba(251,191,36,0.1);
+    }
+    .status-pill.done, .status-pill.booked {
+      color: #34d399;
+      border-color: rgba(52,211,153,0.35);
+      background: rgba(52,211,153,0.1);
+    }
+    .status-pill.cancelled, .status-pill.spam, .status-pill.closed {
+      color: #f87171;
+      border-color: rgba(248,113,113,0.35);
+      background: rgba(248,113,113,0.1);
+    }
+    .chat-modal {
+      max-width: 860px;
+    }
+    .chat-transcript {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      background: #0f0f0f;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .chat-bubble {
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .chat-bubble.user {
+      background: rgba(167,139,250,0.16);
+      border: 1px solid rgba(167,139,250,0.35);
+    }
+    .chat-bubble.assistant {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .chat-bubble-meta {
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 4px;
+    }
+    .kb-panel textarea {
+      width: 100%;
+      min-height: 460px;
+      resize: vertical;
+      background: #0f0f0f;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 10px;
+      color: #e0e0e0;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .kb-meta {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 10px;
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .admin-sidebar { width: 60px; padding: 16px 0; }
@@ -183,6 +311,18 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             <span>Services</span>
           </a>
+          <a href="#" data-section="leads" onclick="switchSection('leads', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12h-6"/><path d="M13 6H3"/><path d="M13 18H3"/><path d="M17 6l4 6-4 6"/></svg>
+            <span>Leads</span>
+          </a>
+          <a href="#" data-section="chats" onclick="switchSection('chats', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6l-4 4v-4H5a2 2 0 0 1-2-2z"/></svg>
+            <span>Chats</span>
+          </a>
+          <a href="#" data-section="chatbot-kb" onclick="switchSection('chatbot-kb', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+            <span>Chatbot KB</span>
+          </a>
         </nav>
         <div class="sidebar-bottom">
           <a href="./index.html">Back to Site</a>
@@ -215,6 +355,65 @@
             <button class="btn btn-primary" onclick="openServiceForm()">+ Add Service</button>
           </div>
           <div class="admin-cards" id="servicesList"></div>
+        </div>
+
+        <!-- Leads Section -->
+        <div id="section-leads" style="display:none">
+          <div class="admin-header">
+            <h1>Leads</h1>
+            <button class="btn btn-secondary" onclick="loadLeads(true)">Refresh</button>
+          </div>
+          <div class="admin-panel">
+            <div class="admin-toolbar">
+              <input type="search" id="leadSearchInput" placeholder="Search by name/email/phone/service" oninput="onLeadFiltersChanged()">
+              <select id="leadStatusFilter" onchange="onLeadFiltersChanged()">
+                <option value="all">All statuses</option>
+                <option value="pending">pending</option>
+                <option value="new">new</option>
+                <option value="in_progress">in_progress</option>
+                <option value="done">done</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div id="leadsList" class="admin-list"></div>
+          </div>
+        </div>
+
+        <!-- Chats Section -->
+        <div id="section-chats" style="display:none">
+          <div class="admin-header">
+            <h1>Chats</h1>
+            <button class="btn btn-secondary" onclick="loadChats(true)">Refresh</button>
+          </div>
+          <div class="admin-panel">
+            <div class="admin-toolbar">
+              <input type="search" id="chatSearchInput" placeholder="Search by lead/session/message" oninput="onChatFiltersChanged()">
+              <select id="chatStatusFilter" onchange="onChatFiltersChanged()">
+                <option value="all">All statuses</option>
+                <option value="open">open</option>
+                <option value="collecting">collecting</option>
+                <option value="booked">booked</option>
+                <option value="closed">closed</option>
+                <option value="spam">spam</option>
+              </select>
+            </div>
+            <div id="chatsList" class="admin-list"></div>
+          </div>
+        </div>
+
+        <!-- Chatbot Knowledge Base Section -->
+        <div id="section-chatbot-kb" style="display:none">
+          <div class="admin-header">
+            <h1>Chatbot Knowledge Base</h1>
+            <button class="btn btn-secondary" onclick="loadChatbotKnowledge(true)">Reload</button>
+          </div>
+          <div class="admin-panel kb-panel">
+            <div class="kb-meta" id="kbSourceLabel">Source: loading...</div>
+            <textarea id="chatbotKnowledgeInput" placeholder="Write bot FAQ and rules here..."></textarea>
+            <div class="form-actions" style="justify-content:flex-start; margin-top: 12px;">
+              <button class="btn btn-primary" onclick="saveChatbotKnowledge()">Save Knowledge Base</button>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -443,6 +642,26 @@
           <button type="submit" class="btn btn-primary" style="padding:10px 24px;">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Chat Viewer Modal -->
+  <div class="admin-modal-overlay" id="chatViewerModal">
+    <div class="admin-modal chat-modal">
+      <button class="close-btn" onclick="closeAdminModal('chatViewerModal')">&times;</button>
+      <h2>Chat Details</h2>
+      <div class="admin-meta" id="chatViewerMeta"></div>
+      <div class="admin-toolbar" style="margin-bottom:10px;">
+        <select id="chatViewerStatus">
+          <option value="open">open</option>
+          <option value="collecting">collecting</option>
+          <option value="booked">booked</option>
+          <option value="closed">closed</option>
+          <option value="spam">spam</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="saveActiveChatStatus()">Save Status</button>
+      </div>
+      <div class="chat-transcript" id="chatTranscript"></div>
     </div>
   </div>
 

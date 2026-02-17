@@ -11,6 +11,26 @@ try {
   currentUser = null;
 }
 
+let leads = [];
+let chats = [];
+let activeChat = null;
+
+let leadFilters = {
+  search: '',
+  status: 'all'
+};
+
+let chatFilters = {
+  search: '',
+  status: 'all'
+};
+
+let leadSearchTimer = null;
+let chatSearchTimer = null;
+
+const BOOKING_STATUSES = ['pending', 'new', 'in_progress', 'done', 'cancelled'];
+const CHAT_STATUSES = ['open', 'collecting', 'booked', 'closed', 'spam'];
+
 // ===== API helpers (reused from app.js pattern) =====
 function buildApiUrl(path) {
   const normalizedPath = path.startsWith('/') ? path : '/' + path;
@@ -145,6 +165,140 @@ function demoAdminApi(path, options) {
     return createApiResponse(201, { message: 'Service created', service: item });
   }
 
+  if (path.startsWith('/api/admin/bookings/') && method === 'PATCH') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const id = parseInt(path.replace('/api/admin/bookings/', ''), 10);
+    const status = String(body.status || '').trim().toLowerCase();
+    const validStatuses = new Set(['pending', 'new', 'in_progress', 'done', 'cancelled']);
+    if (!Number.isInteger(id) || id <= 0) return createApiResponse(400, { error: 'Invalid booking id' });
+    if (!validStatuses.has(status)) return createApiResponse(400, { error: 'Invalid booking status' });
+
+    const bookings = getStorageArray('quantum_demo_bookings');
+    const idx = bookings.findIndex((item) => Number(item.id) === id);
+    if (idx === -1) return createApiResponse(404, { error: 'Booking not found' });
+
+    bookings[idx] = { ...bookings[idx], status };
+    setStorageArray('quantum_demo_bookings', bookings);
+    return createApiResponse(200, { message: 'Booking updated successfully', booking: bookings[idx] });
+  }
+
+  if (path.startsWith('/api/admin/leads') && method === 'GET') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const status = String((path.split('status=')[1] || '').split('&')[0] || '').trim();
+    const search = decodeURIComponent(String((path.split('search=')[1] || '').split('&')[0] || '').trim()).toLowerCase();
+    const bookings = getStorageArray('quantum_demo_bookings');
+
+    const leads = bookings.filter((item) => {
+      const statusOk = !status || status === 'all' || String(item.status || '').toLowerCase() === status;
+      if (!statusOk) return false;
+      if (!search) return true;
+
+      const haystack = [item.name, item.email, item.phone, item.service, item.message]
+        .map((v) => String(v || '').toLowerCase())
+        .join(' ');
+      return haystack.includes(search);
+    });
+
+    return createApiResponse(200, { leads });
+  }
+
+  if (path.startsWith('/api/admin/chats') && method === 'GET') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const sessions = getStorageArray('quantum_demo_chat_sessions');
+    const messages = getStorageArray('quantum_demo_chat_messages');
+
+    if (path.match(/^\/api\/admin\/chats\/\d+\/messages/)) {
+      const id = parseInt(path.split('/')[4], 10);
+      const chat = sessions.find((item) => Number(item.id) === id);
+      if (!chat) return createApiResponse(404, { error: 'Chat not found' });
+      const chatMessages = messages.filter((msg) => Number(msg.chatSessionId) === id);
+      return createApiResponse(200, { chat, messages: chatMessages });
+    }
+
+    const status = String((path.split('status=')[1] || '').split('&')[0] || '').trim();
+    const search = decodeURIComponent(String((path.split('search=')[1] || '').split('&')[0] || '').trim()).toLowerCase();
+
+    const chats = sessions.filter((chat) => {
+      const statusOk = !status || status === 'all' || String(chat.leadStatus || '').toLowerCase() === status;
+      if (!statusOk) return false;
+      if (!search) return true;
+
+      const chatMessages = messages.filter((msg) => Number(msg.chatSessionId) === Number(chat.id));
+      const lastMessage = chatMessages[chatMessages.length - 1];
+
+      const haystack = [
+        chat.sessionId,
+        chat.leadName,
+        chat.leadEmail,
+        chat.leadPhone,
+        chat.leadService,
+        chat.leadMessage,
+        lastMessage && lastMessage.content
+      ].map((v) => String(v || '').toLowerCase()).join(' ');
+
+      return haystack.includes(search);
+    }).map((chat) => {
+      const chatMessages = messages.filter((msg) => Number(msg.chatSessionId) === Number(chat.id));
+      const lastMessage = chatMessages[chatMessages.length - 1] || null;
+      return {
+        ...chat,
+        lead: {
+          name: chat.leadName || '',
+          email: chat.leadEmail || '',
+          phone: chat.leadPhone || '',
+          service: chat.leadService || '',
+          message: chat.leadMessage || ''
+        },
+        messageCount: chatMessages.length,
+        lastMessage
+      };
+    });
+
+    return createApiResponse(200, { chats });
+  }
+
+  if (path.match(/^\/api\/admin\/chats\/\d+\/status$/) && method === 'PATCH') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const id = parseInt(path.split('/')[4], 10);
+    const status = String(body.status || '').trim().toLowerCase();
+    const validStatuses = new Set(['open', 'collecting', 'booked', 'closed', 'spam']);
+    if (!Number.isInteger(id) || id <= 0) return createApiResponse(400, { error: 'Invalid chat id' });
+    if (!validStatuses.has(status)) return createApiResponse(400, { error: 'Invalid chat status' });
+
+    const sessions = getStorageArray('quantum_demo_chat_sessions');
+    const idx = sessions.findIndex((item) => Number(item.id) === id);
+    if (idx === -1) return createApiResponse(404, { error: 'Chat not found' });
+
+    sessions[idx] = { ...sessions[idx], leadStatus: status, updatedAt: new Date().toISOString() };
+    setStorageArray('quantum_demo_chat_sessions', sessions);
+    return createApiResponse(200, { message: 'Chat status updated', chat: sessions[idx] });
+  }
+
+  if (path === '/api/admin/chatbot-knowledge' && method === 'GET') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const text = localStorage.getItem('quantum_demo_chatbot_knowledge') || '';
+    return createApiResponse(200, { text, source: text ? 'database' : 'file' });
+  }
+
+  if (path === '/api/admin/chatbot-knowledge' && method === 'PUT') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const text = String(body.text || '');
+    localStorage.setItem('quantum_demo_chatbot_knowledge', text);
+    return createApiResponse(200, { message: 'Chatbot knowledge base saved', text });
+  }
+
   return createApiResponse(404, { error: 'Not found' });
 }
 
@@ -196,6 +350,38 @@ function esc(text) {
   const div = document.createElement('div');
   div.textContent = text || '';
   return div.innerHTML;
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString();
+}
+
+function truncateText(value, max) {
+  const text = String(value || '').trim();
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + '…';
+}
+
+function statusPill(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  return `<span class="status-pill ${esc(normalized)}">${esc(normalized || 'unknown')}</span>`;
+}
+
+function withQuery(path, params) {
+  const query = new URLSearchParams();
+  Object.keys(params || {}).forEach((key) => {
+    const value = params[key];
+    if (value === undefined || value === null) return;
+    const stringValue = String(value).trim();
+    if (!stringValue || stringValue === 'all') return;
+    query.set(key, stringValue);
+  });
+
+  const queryString = query.toString();
+  return queryString ? `${path}?${queryString}` : path;
 }
 
 // ================================================================
@@ -527,6 +713,358 @@ async function deleteService(id) {
 }
 
 // ================================================================
+// LEADS
+// ================================================================
+async function loadLeads(force) {
+  try {
+    const endpoint = withQuery('/api/admin/leads', {
+      limit: 300,
+      status: leadFilters.status,
+      search: leadFilters.search
+    });
+
+    const res = await adminFetch(endpoint, { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load leads', 'error');
+      return;
+    }
+
+    leads = Array.isArray(data.leads) ? data.leads : [];
+    renderLeads();
+
+    if (force) showToast('Leads refreshed', 'info');
+  } catch (e) {
+    showToast('Failed to load leads', 'error');
+  }
+}
+
+function onLeadFiltersChanged() {
+  const searchInput = document.getElementById('leadSearchInput');
+  const statusSelect = document.getElementById('leadStatusFilter');
+
+  leadFilters.search = searchInput ? searchInput.value.trim() : '';
+  leadFilters.status = statusSelect ? statusSelect.value : 'all';
+
+  clearTimeout(leadSearchTimer);
+  leadSearchTimer = setTimeout(() => loadLeads(false), 250);
+}
+
+function renderLeads() {
+  const root = document.getElementById('leadsList');
+  if (!root) return;
+
+  if (!leads.length) {
+    root.innerHTML = '<div class="empty-state"><p>No leads found for current filters.</p></div>';
+    return;
+  }
+
+  root.innerHTML = leads.map((lead) => {
+    const statusOptions = BOOKING_STATUSES
+      .map((status) => `<option value="${esc(status)}" ${status === lead.status ? 'selected' : ''}>${esc(status)}</option>`)
+      .join('');
+
+    return `
+      <div class="admin-list-item">
+        <div class="admin-list-head">
+          <strong>${esc(lead.name || '-')}</strong>
+          ${statusPill(lead.status)}
+        </div>
+        <div class="admin-meta">${esc(lead.email || '-')}
+${esc(lead.phone || '-')}
+Service: ${esc(lead.service || '-')}
+Created: ${esc(formatDateTime(lead.createdAt))}</div>
+        ${lead.message ? `<div class="admin-meta">${esc(truncateText(lead.message, 320))}</div>` : ''}
+        <div class="admin-toolbar" style="margin-bottom:0;">
+          <select onchange="updateLeadStatus(${Number(lead.id)}, this.value)">${statusOptions}</select>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateLeadStatus(leadId, status) {
+  try {
+    const res = await adminFetch(`/api/admin/bookings/${leadId}`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ status })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update lead status', 'error');
+      return;
+    }
+
+    leads = leads.map((item) => (Number(item.id) === Number(leadId) ? { ...item, status: data.booking.status } : item));
+    renderLeads();
+    showToast('Lead status updated', 'success');
+  } catch (e) {
+    showToast('Failed to update lead status', 'error');
+  }
+}
+
+// ================================================================
+// CHATS
+// ================================================================
+async function loadChats(force) {
+  try {
+    const endpoint = withQuery('/api/admin/chats', {
+      limit: 200,
+      status: chatFilters.status,
+      search: chatFilters.search
+    });
+
+    const res = await adminFetch(endpoint, { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load chats', 'error');
+      return;
+    }
+
+    chats = Array.isArray(data.chats) ? data.chats : [];
+    renderChats();
+
+    if (activeChat && activeChat.id) {
+      const refreshed = chats.find((item) => Number(item.id) === Number(activeChat.id));
+      if (refreshed) {
+        activeChat = refreshed;
+      }
+    }
+
+    if (force) showToast('Chats refreshed', 'info');
+  } catch (e) {
+    showToast('Failed to load chats', 'error');
+  }
+}
+
+function onChatFiltersChanged() {
+  const searchInput = document.getElementById('chatSearchInput');
+  const statusSelect = document.getElementById('chatStatusFilter');
+
+  chatFilters.search = searchInput ? searchInput.value.trim() : '';
+  chatFilters.status = statusSelect ? statusSelect.value : 'all';
+
+  clearTimeout(chatSearchTimer);
+  chatSearchTimer = setTimeout(() => loadChats(false), 250);
+}
+
+function renderChats() {
+  const root = document.getElementById('chatsList');
+  if (!root) return;
+
+  if (!chats.length) {
+    root.innerHTML = '<div class="empty-state"><p>No chats found for current filters.</p></div>';
+    return;
+  }
+
+  root.innerHTML = chats.map((chat) => {
+    const statusOptions = CHAT_STATUSES
+      .map((status) => `<option value="${esc(status)}" ${status === chat.leadStatus ? 'selected' : ''}>${esc(status)}</option>`)
+      .join('');
+
+    const leadMeta = [
+      chat.lead && chat.lead.name ? `Lead: ${chat.lead.name}` : '',
+      chat.lead && chat.lead.email ? chat.lead.email : '',
+      chat.lead && chat.lead.phone ? chat.lead.phone : '',
+      chat.lead && chat.lead.service ? `Service: ${chat.lead.service}` : ''
+    ].filter(Boolean).join('\n');
+
+    const lastMessage = chat.lastMessage && chat.lastMessage.content ? truncateText(chat.lastMessage.content, 220) : '';
+
+    return `
+      <div class="admin-list-item">
+        <div class="admin-list-head">
+          <strong>Session ${esc(chat.sessionId || String(chat.id))}</strong>
+          ${statusPill(chat.leadStatus)}
+        </div>
+        <div class="admin-meta">${esc(leadMeta || 'No lead data yet')}
+Messages: ${esc(String(chat.messageCount || 0))}
+Updated: ${esc(formatDateTime(chat.updatedAt))}</div>
+        ${lastMessage ? `<div class="admin-meta">Last: ${esc(lastMessage)}</div>` : ''}
+        <div class="admin-toolbar" style="margin-bottom:0;">
+          <select id="chat-status-${Number(chat.id)}">${statusOptions}</select>
+          <button class="btn btn-secondary btn-sm" onclick="saveInlineChatStatus(${Number(chat.id)})">Save</button>
+          <button class="btn btn-primary btn-sm" onclick="openChatViewer(${Number(chat.id)})">Open Chat</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function updateChatStatus(chatId, status, silent) {
+  try {
+    const res = await adminFetch(`/api/admin/chats/${chatId}/status`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ status })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      if (!silent) showToast(data.error || 'Failed to update chat status', 'error');
+      return false;
+    }
+
+    chats = chats.map((item) => (Number(item.id) === Number(chatId) ? { ...item, leadStatus: status } : item));
+    if (activeChat && Number(activeChat.id) === Number(chatId)) {
+      activeChat = { ...activeChat, leadStatus: status };
+    }
+
+    renderChats();
+    if (!silent) showToast('Chat status updated', 'success');
+    return true;
+  } catch (e) {
+    if (!silent) showToast('Failed to update chat status', 'error');
+    return false;
+  }
+}
+
+async function saveInlineChatStatus(chatId) {
+  const select = document.getElementById(`chat-status-${chatId}`);
+  if (!select) return;
+  await updateChatStatus(chatId, select.value, false);
+}
+
+async function openChatViewer(chatId) {
+  const chat = chats.find((item) => Number(item.id) === Number(chatId));
+  if (!chat) {
+    showToast('Chat not found', 'error');
+    return;
+  }
+
+  activeChat = chat;
+
+  const meta = document.getElementById('chatViewerMeta');
+  const statusSelect = document.getElementById('chatViewerStatus');
+  const transcript = document.getElementById('chatTranscript');
+
+  if (meta) {
+    const leadText = [
+      chat.lead && chat.lead.name ? `Lead: ${chat.lead.name}` : 'Lead: -',
+      chat.lead && chat.lead.email ? `Email: ${chat.lead.email}` : 'Email: -',
+      chat.lead && chat.lead.phone ? `Phone: ${chat.lead.phone}` : 'Phone: -',
+      chat.lead && chat.lead.service ? `Service: ${chat.lead.service}` : 'Service: -',
+      `Session: ${chat.sessionId || chat.id}`,
+      `Updated: ${formatDateTime(chat.updatedAt)}`
+    ].join('\n');
+
+    meta.textContent = leadText;
+  }
+
+  if (statusSelect) {
+    statusSelect.value = CHAT_STATUSES.includes(chat.leadStatus) ? chat.leadStatus : 'open';
+  }
+
+  if (transcript) {
+    transcript.innerHTML = '<div class="admin-meta">Loading messages...</div>';
+  }
+
+  openAdminModal('chatViewerModal');
+
+  try {
+    const res = await adminFetch(`/api/admin/chats/${chatId}/messages?limit=400`, { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (transcript) transcript.innerHTML = `<div class="admin-meta">${esc(data.error || 'Failed to load chat messages')}</div>`;
+      return;
+    }
+
+    const messages = Array.isArray(data.messages) ? data.messages : [];
+    renderChatTranscript(messages);
+  } catch (e) {
+    if (transcript) transcript.innerHTML = '<div class="admin-meta">Failed to load chat messages</div>';
+  }
+}
+
+function renderChatTranscript(messages) {
+  const transcript = document.getElementById('chatTranscript');
+  if (!transcript) return;
+
+  if (!messages.length) {
+    transcript.innerHTML = '<div class="admin-meta">No messages in this chat yet.</div>';
+    return;
+  }
+
+  transcript.innerHTML = messages.map((message) => {
+    const role = String(message.role || '').toLowerCase() === 'assistant' ? 'assistant' : 'user';
+    return `
+      <div class="chat-bubble ${role}">
+        <div class="chat-bubble-meta">${esc(role)} · ${esc(formatDateTime(message.createdAt))}</div>
+        ${esc(message.content || '')}
+      </div>
+    `;
+  }).join('');
+
+  transcript.scrollTop = transcript.scrollHeight;
+}
+
+async function saveActiveChatStatus() {
+  if (!activeChat) return;
+  const select = document.getElementById('chatViewerStatus');
+  if (!select) return;
+
+  const ok = await updateChatStatus(activeChat.id, select.value, false);
+  if (ok) {
+    const updated = chats.find((item) => Number(item.id) === Number(activeChat.id));
+    if (updated) activeChat = updated;
+  }
+}
+
+// ================================================================
+// CHATBOT KNOWLEDGE BASE
+// ================================================================
+async function loadChatbotKnowledge(force) {
+  try {
+    const res = await adminFetch('/api/admin/chatbot-knowledge', { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load chatbot knowledge', 'error');
+      return;
+    }
+
+    const input = document.getElementById('chatbotKnowledgeInput');
+    const source = document.getElementById('kbSourceLabel');
+
+    if (input) input.value = data.text || '';
+    if (source) source.textContent = `Source: ${data.source || 'unknown'}`;
+
+    if (force) showToast('Knowledge base loaded', 'info');
+  } catch (e) {
+    showToast('Failed to load chatbot knowledge', 'error');
+  }
+}
+
+async function saveChatbotKnowledge() {
+  const input = document.getElementById('chatbotKnowledgeInput');
+  if (!input) return;
+
+  try {
+    const res = await adminFetch('/api/admin/chatbot-knowledge', {
+      method: 'PUT',
+      headers: authHeaders(),
+      body: JSON.stringify({ text: input.value })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showToast(data.error || 'Failed to save chatbot knowledge', 'error');
+      return;
+    }
+
+    showToast('Knowledge base saved', 'success');
+    loadChatbotKnowledge(false);
+  } catch (e) {
+    showToast('Failed to save chatbot knowledge', 'error');
+  }
+}
+
+// ================================================================
 // INIT
 // ================================================================
 async function initAdmin() {
@@ -555,10 +1093,19 @@ async function initAdmin() {
   document.getElementById('loadingState').style.display = 'none';
   document.getElementById('adminLayout').style.display = 'flex';
 
+  // Initialize filter UI state
+  const leadStatusSelect = document.getElementById('leadStatusFilter');
+  const chatStatusSelect = document.getElementById('chatStatusFilter');
+  if (leadStatusSelect) leadStatusSelect.value = leadFilters.status;
+  if (chatStatusSelect) chatStatusSelect.value = chatFilters.status;
+
   // Load all data
   loadTestimonials();
   loadPrograms();
   loadServices();
+  loadLeads(false);
+  loadChats(false);
+  loadChatbotKnowledge(false);
 }
 
 document.addEventListener('DOMContentLoaded', initAdmin);
