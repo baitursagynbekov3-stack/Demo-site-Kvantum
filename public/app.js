@@ -13,7 +13,43 @@ let adminFilters = {
 const API_BASE_URL = (window.QUANTUM_API_BASE_URL || '').trim().replace(/\/$/, '');
 const USE_DEMO_API = window.QUANTUM_USE_DEMO_API === true || (!API_BASE_URL && window.location.hostname.endsWith('github.io'));
 const CHAT_SESSION_STORAGE_KEY = 'quantum_chat_session_id';
-let chatSessionIdCache = '';
+const chatSessionIdCache = Object.create(null);
+
+function getChatIdentityKey() {
+  if (currentUser && typeof currentUser === 'object') {
+    if (currentUser.id !== undefined && currentUser.id !== null) {
+      return 'user_' + String(currentUser.id);
+    }
+
+    if (currentUser.email) {
+      return 'email_' + String(currentUser.email).trim().toLowerCase();
+    }
+  }
+
+  try {
+    const storedUser = localStorage.getItem('quantum_user');
+    if (storedUser) {
+      const parsedUser = JSON.parse(storedUser);
+      if (parsedUser && typeof parsedUser === 'object') {
+        if (parsedUser.id !== undefined && parsedUser.id !== null) {
+          return 'user_' + String(parsedUser.id);
+        }
+
+        if (parsedUser.email) {
+          return 'email_' + String(parsedUser.email).trim().toLowerCase();
+        }
+      }
+    }
+  } catch (err) {
+    // Ignore parsing/storage errors and fallback to guest identity.
+  }
+
+  return 'guest';
+}
+
+function getChatSessionStorageKey() {
+  return CHAT_SESSION_STORAGE_KEY + '_' + getChatIdentityKey();
+}
 
 // Kompot.ai CRM webhook — fire-and-forget, never blocks UI
 function sendToKompotCRM(data) {
@@ -43,22 +79,35 @@ function generateChatSessionId() {
 }
 
 function getChatSessionId() {
-  if (chatSessionIdCache) return chatSessionIdCache;
+  const storageKey = getChatSessionStorageKey();
+
+  if (chatSessionIdCache[storageKey]) {
+    return chatSessionIdCache[storageKey];
+  }
 
   try {
-    const existing = localStorage.getItem(CHAT_SESSION_STORAGE_KEY);
+    const existing = localStorage.getItem(storageKey);
     if (existing && /^[A-Za-z0-9_-]{8,80}$/.test(existing)) {
-      chatSessionIdCache = existing;
-      return chatSessionIdCache;
+      chatSessionIdCache[storageKey] = existing;
+      return chatSessionIdCache[storageKey];
+    }
+
+    // One-time migration from legacy key used before per-user chat sessions.
+    const legacyKey = CHAT_SESSION_STORAGE_KEY;
+    const legacy = localStorage.getItem(legacyKey);
+    if (legacy && /^[A-Za-z0-9_-]{8,80}$/.test(legacy) && storageKey.endsWith('_guest')) {
+      localStorage.setItem(storageKey, legacy);
+      chatSessionIdCache[storageKey] = legacy;
+      return chatSessionIdCache[storageKey];
     }
 
     const created = generateChatSessionId().slice(0, 80);
-    localStorage.setItem(CHAT_SESSION_STORAGE_KEY, created);
-    chatSessionIdCache = created;
-    return chatSessionIdCache;
+    localStorage.setItem(storageKey, created);
+    chatSessionIdCache[storageKey] = created;
+    return chatSessionIdCache[storageKey];
   } catch (err) {
-    chatSessionIdCache = generateChatSessionId().slice(0, 80);
-    return chatSessionIdCache;
+    chatSessionIdCache[storageKey] = generateChatSessionId().slice(0, 80);
+    return chatSessionIdCache[storageKey];
   }
 }
 
