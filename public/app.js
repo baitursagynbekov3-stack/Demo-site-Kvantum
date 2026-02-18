@@ -494,8 +494,13 @@ function demoApi(path, options) {
       return createApiResponse(401, { error: 'Access denied' });
     }
 
+    const normalizedEmail = String(sessionUser.email || '').trim().toLowerCase();
     const bookings = getStorageArray(bookingsKey)
-      .filter((booking) => String(booking.email || '').trim().toLowerCase() === String(sessionUser.email || '').trim().toLowerCase())
+      .filter((booking) => {
+        if (Number(booking.userId) === Number(sessionUser.id)) return true;
+        return (booking.userId === null || booking.userId === undefined)
+          && String(booking.email || '').trim().toLowerCase() === normalizedEmail;
+      })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     return createApiResponse(200, { bookings: bookings.slice(0, 200) });
@@ -620,20 +625,28 @@ function demoApi(path, options) {
     const name = (body.name || '').trim();
     const email = (body.email || '').trim().toLowerCase();
     const phone = normalizePhone(body.phone);
+    const sessionUser = getDemoSessionUser();
 
-    if (!name || !email || !phone) {
+    if (sessionUser && email && email !== String(sessionUser.email || '').trim().toLowerCase()) {
+      return createApiResponse(400, { error: 'Use your account email for authenticated bookings' });
+    }
+
+    const bookingEmail = sessionUser ? String(sessionUser.email || '').trim().toLowerCase() : email;
+
+    if (!name || !bookingEmail || !phone) {
       return createApiResponse(400, { error: 'Name, valid email and phone with country code are required' });
     }
 
-    if (!isValidEmail(email)) {
+    if (!isValidEmail(bookingEmail)) {
       return createApiResponse(400, { error: 'Invalid email format' });
     }
 
     const bookings = getStorageArray(bookingsKey);
     const booking = {
       id: bookings.length + 1,
+      userId: sessionUser ? sessionUser.id : null,
       name,
-      email,
+      email: bookingEmail,
       phone,
       service: body.service || 'consultation',
       message: body.message || '',
@@ -2645,9 +2658,14 @@ async function handleConsultation(e) {
   };
 
   try {
+    const requestHeaders = { 'Content-Type': 'application/json' };
+    if (authToken) {
+      requestHeaders.Authorization = 'Bearer ' + authToken;
+    }
+
     const res = await apiFetch('/api/book-consultation', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: requestHeaders,
       body: JSON.stringify(data)
     });
     const result = await res.json();
@@ -2684,9 +2702,14 @@ async function handleContact(e) {
   };
 
   try {
+    const requestHeaders = { 'Content-Type': 'application/json' };
+    if (authToken) {
+      requestHeaders.Authorization = 'Bearer ' + authToken;
+    }
+
     const res = await apiFetch('/api/book-consultation', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: requestHeaders,
       body: JSON.stringify(data)
     });
     const result = await res.json();

@@ -299,6 +299,23 @@ function authenticateToken(req, res, next) {
   });
 }
 
+function getOptionalAuthPayload(req) {
+  const authHeader = String(req.headers.authorization || '').trim();
+  if (!authHeader) return null;
+
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length).trim()
+    : '';
+
+  if (!token) return null;
+
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (err) {
+    return null;
+  }
+}
+
 function isAdminEmail(email) {
   const normalizedEmail = (email || '').trim().toLowerCase();
   if (!normalizedEmail) return false;
@@ -1524,7 +1541,7 @@ app.post('/api/profile/change-password', authenticateToken, authRateLimiter, asy
   }
 });
 
-// User bookings (resolved by account email)
+// User bookings (primary link by userId + legacy fallback by email)
 app.get('/api/profile/bookings', authenticateToken, async (req, res) => {
   try {
     const limitRaw = parseInt(req.query.limit, 10);
@@ -1532,7 +1549,7 @@ app.get('/api/profile/bookings', authenticateToken, async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { email: true }
+      select: { id: true, email: true }
     });
 
     if (!user) {
@@ -1540,7 +1557,17 @@ app.get('/api/profile/bookings', authenticateToken, async (req, res) => {
     }
 
     const bookings = await prisma.booking.findMany({
-      where: { email: user.email },
+      where: {
+        OR: [
+          { userId: user.id },
+          {
+            AND: [
+              { userId: null },
+              { email: user.email }
+            ]
+          }
+        ]
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       select: {
@@ -1589,21 +1616,39 @@ app.get('/api/profile/payments', authenticateToken, async (req, res) => {
 app.post('/api/book-consultation', async (req, res) => {
   try {
     const { name, email, phone, service, message } = req.body;
+    const normalizedName = String(name || '').trim();
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedPhone = normalizePhone(phone);
 
-    if (!name || !normalizedEmail || !normalizedPhone) {
+    const authPayload = getOptionalAuthPayload(req);
+    let linkedUser = null;
+
+    if (authPayload && authPayload.id) {
+      linkedUser = await prisma.user.findUnique({
+        where: { id: Number(authPayload.id) },
+        select: { id: true, email: true }
+      });
+    }
+
+    if (linkedUser && normalizedEmail && normalizedEmail !== linkedUser.email) {
+      return res.status(400).json({ error: 'Use your account email for authenticated bookings' });
+    }
+
+    const bookingEmail = linkedUser ? linkedUser.email : normalizedEmail;
+
+    if (!normalizedName || !bookingEmail || !normalizedPhone) {
       return res.status(400).json({ error: 'Name, valid email and phone with country code are required' });
     }
 
-    if (!isValidEmail(normalizedEmail)) {
+    if (!isValidEmail(bookingEmail)) {
       return res.status(400).json({ error: 'Invalid email format' });
     }
 
     const booking = await prisma.booking.create({
       data: {
-        name,
-        email: normalizedEmail,
+        userId: linkedUser ? linkedUser.id : null,
+        name: normalizedName,
+        email: bookingEmail,
         phone: normalizedPhone,
         service: service || 'consultation',
         message: message || '',
@@ -2299,8 +2344,14 @@ app.post('/api/chat', chatRateLimiter, async (req, res) => {
       const missing = getMissingLeadFields(mergedLead);
 
       if (missing.length === 0) {
+        const linkedUser = await prisma.user.findUnique({
+          where: { email: mergedLead.email },
+          select: { id: true }
+        });
+
         const booking = await prisma.booking.create({
           data: {
+            userId: linkedUser ? linkedUser.id : null,
             name: mergedLead.name,
             email: mergedLead.email,
             phone: mergedLead.phone,

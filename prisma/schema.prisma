@@ -17,20 +17,26 @@ model User {
   authProvider String    @default("local")
   googleId     String?   @unique
   createdAt    DateTime  @default(now())
+  bookings     Booking[]
   payments     Payment[]
 
   @@index([role])
 }
 
 model Booking {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
+  userId    Int?
   name      String
   email     String
   phone     String
-  service   String   @default("consultation")
-  message   String   @default("")
-  status    String   @default("pending")
-  createdAt DateTime @default(now())
+  service   String    @default("consultation")
+  message   String    @default("")
+  status    String    @default("pending")
+  createdAt DateTime  @default(now())
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([email])
 }
 
 model Payment {
