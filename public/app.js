@@ -626,6 +626,7 @@ function apiFetch(path, options) {
 // ===== Translations =====
 const translations = {
   ru: {
+    'logo.icon': 'К',
     'logo.text': 'КВАНТУМ',
     'nav.about': 'О нас',
     'nav.services': 'Услуги',
