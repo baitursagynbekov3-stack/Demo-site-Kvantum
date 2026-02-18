@@ -1347,8 +1347,17 @@ body.dark-mode .phone-input-group .country-code-select {
   align-items: center;
   min-width: 360px;
 }
+.admin-user-role-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 210px;
+}
 .admin-status-select {
   min-width: 130px;
+}
+.admin-user-role-actions .admin-status-select {
+  min-width: 120px;
 }
 .admin-note-input {
   flex: 1;
@@ -1861,7 +1870,8 @@ body.dark-mode .profile-danger-zone {
     width: 100%;
     min-width: 0;
   }
-  .admin-booking-actions {
+  .admin-booking-actions,
+  .admin-user-role-actions {
     flex-direction: column;
     align-items: stretch;
     min-width: 220px;

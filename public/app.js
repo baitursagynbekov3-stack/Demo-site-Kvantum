@@ -805,9 +805,9 @@ function demoApi(path, options) {
   }
 
   if (path.startsWith('/api/admin/overview')) {
-    const auth = readHeader(options && options.headers, 'Authorization');
-    if (!auth || !auth.startsWith('Bearer demo-')) {
-      return createApiResponse(401, { error: 'Access denied' });
+    const role = getDemoUserRole();
+    if (role !== 'admin') {
+      return createApiResponse(403, { error: 'Admin access required' });
     }
 
     const users = getStorageArray(usersKey)
@@ -816,7 +816,10 @@ function demoApi(path, options) {
         name: user.name,
         email: user.email,
         phone: user.phone || '',
-        createdAt: user.createdAt || new Date().toISOString()
+        role: user.role || 'user',
+        authProvider: user.authProvider || 'local',
+        createdAt: user.createdAt || new Date().toISOString(),
+        lastLoginAt: user.lastLoginAt || null
       }))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
@@ -844,9 +847,9 @@ function demoApi(path, options) {
   }
 
   if (path.startsWith('/api/admin/bookings/') && String((options && options.method) || 'GET').toUpperCase() === 'PATCH') {
-    const auth = readHeader(options && options.headers, 'Authorization');
-    if (!auth || !auth.startsWith('Bearer demo-')) {
-      return createApiResponse(401, { error: 'Access denied' });
+    const role = getDemoUserRole();
+    if (role !== 'admin') {
+      return createApiResponse(403, { error: 'Admin access required' });
     }
 
     const bookingId = Number(path.split('?')[0].split('/').pop());
@@ -889,6 +892,62 @@ function demoApi(path, options) {
     });
   }
 
+  if (path.startsWith('/api/admin/users/') && String((options && options.method) || 'GET').toUpperCase() === 'PATCH') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') {
+      return createApiResponse(403, { error: 'Admin access required' });
+    }
+
+    const userId = Number(path.split('?')[0].split('/').pop());
+    const nextRole = normalizeAdminValue(body.role);
+    const allowedRoles = ['user', 'admin'];
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return createApiResponse(400, { error: 'Invalid user id' });
+    }
+
+    if (!allowedRoles.includes(nextRole)) {
+      return createApiResponse(400, { error: 'Invalid user role' });
+    }
+
+    const users = getStorageArray(usersKey);
+    const index = users.findIndex((user) => Number(user.id) === userId);
+
+    if (index === -1) {
+      return createApiResponse(404, { error: 'User not found' });
+    }
+
+    const sessionEmail = getDemoAuthEmail();
+    const targetEmail = String(users[index].email || '').trim().toLowerCase();
+    const demoAdmins = (window.QUANTUM_DEMO_ADMIN_EMAILS || []).map((email) => String(email || '').trim().toLowerCase());
+
+    if (sessionEmail && targetEmail === sessionEmail && nextRole !== 'admin') {
+      return createApiResponse(400, { error: 'You cannot remove your own admin access' });
+    }
+
+    if (demoAdmins.includes(targetEmail) && nextRole !== 'admin') {
+      return createApiResponse(400, { error: 'This user is pinned as admin in environment config' });
+    }
+
+    users[index].role = nextRole;
+    setStorageArray(usersKey, users);
+
+    const user = users[index];
+    return createApiResponse(200, {
+      message: 'User role updated successfully (demo mode)',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || '',
+        role: user.role || 'user',
+        authProvider: user.authProvider || 'local',
+        createdAt: user.createdAt || new Date().toISOString(),
+        lastLoginAt: user.lastLoginAt || null
+      }
+    });
+  }
+
   if (path === '/api/notify') {
     return createApiResponse(200, { message: 'Notification sent (demo mode)' });
   }
@@ -918,17 +977,20 @@ function demoApi(path, options) {
 
   // ===== Demo admin endpoints =====
   const method = (options && options.method || 'GET').toUpperCase();
-  const auth = readHeader(options && options.headers, 'Authorization');
 
   function getDemoUserRole() {
-    if (!auth || !auth.startsWith('Bearer demo-')) return null;
+    const authHeader = readHeader(options && options.headers, 'Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer demo-')) return null;
+
     try {
-      const decoded = atob(auth.replace('Bearer demo-', ''));
-      const email = decoded.split(':')[0];
+      const decoded = atob(authHeader.replace('Bearer demo-', ''));
+      const email = String(decoded.split(':')[0] || '').trim().toLowerCase();
       const users = getStorageArray(usersKey);
-      const user = users.find(u => u.email === email);
+      const user = users.find((u) => String(u.email || '').trim().toLowerCase() === email);
       return user ? (user.role || 'user') : 'user';
-    } catch (e) { return 'user'; }
+    } catch (e) {
+      return 'user';
+    }
   }
 
   if (path === '/api/admin/check') {
@@ -2490,6 +2552,10 @@ function getAdminLabels() {
       userName: 'Имя',
       userEmail: 'Email',
       userPhone: 'Телефон',
+      userRole: 'Роль',
+      userProvider: 'Вход',
+      userLastLogin: 'Последний вход',
+      userManage: 'Управление',
       createdAt: 'Дата',
       bookingService: 'Услуга',
       bookingStatus: 'Статус',
@@ -2500,7 +2566,7 @@ function getAdminLabels() {
       emptyUsers: 'Регистраций пока нет',
       emptyBookings: 'Заявок пока нет',
       emptyPayments: 'Оплат пока нет',
-      searchPlaceholder: 'Поиск: имя, email, телефон, продукт',
+      searchPlaceholder: 'Поиск: имя, email, телефон, роль, продукт',
       bookingStatusFilter: 'Фильтр статуса',
       statusAll: 'Все статусы',
       notePlaceholder: 'Заметка менеджера (опционально)',
@@ -2509,6 +2575,18 @@ function getAdminLabels() {
       clear: 'Сбросить',
       saved: 'Заявка обновлена',
       saveError: 'Не удалось обновить заявку',
+      roleSaved: 'Роль пользователя обновлена',
+      roleSaveError: 'Не удалось обновить роль пользователя',
+      roleSelfError: 'Нельзя снять админ-доступ у своей учетной записи',
+      roleProtectedError: 'Этот аккаунт закреплен как админ в настройках окружения',
+      role: {
+        user: 'Пользователь',
+        admin: 'Админ'
+      },
+      provider: {
+        local: 'Email + пароль',
+        google: 'Google'
+      },
       status: {
         pending: 'Ожидание',
         new: 'Новая',
@@ -2529,6 +2607,10 @@ function getAdminLabels() {
     userName: 'Name',
     userEmail: 'Email',
     userPhone: 'Phone',
+    userRole: 'Role',
+    userProvider: 'Provider',
+    userLastLogin: 'Last login',
+    userManage: 'Manage',
     createdAt: 'Created',
     bookingService: 'Service',
     bookingStatus: 'Status',
@@ -2539,7 +2621,7 @@ function getAdminLabels() {
     emptyUsers: 'No registrations yet',
     emptyBookings: 'No requests yet',
     emptyPayments: 'No payments yet',
-    searchPlaceholder: 'Search: name, email, phone, product',
+    searchPlaceholder: 'Search: name, email, phone, role, product',
     bookingStatusFilter: 'Status filter',
     statusAll: 'All statuses',
     notePlaceholder: 'Manager note (optional)',
@@ -2548,6 +2630,18 @@ function getAdminLabels() {
     clear: 'Clear',
     saved: 'Booking updated',
     saveError: 'Failed to update booking',
+    roleSaved: 'User role updated',
+    roleSaveError: 'Failed to update user role',
+    roleSelfError: 'You cannot remove admin access from your own account',
+    roleProtectedError: 'This account is pinned as admin in environment config',
+    role: {
+      user: 'User',
+      admin: 'Admin'
+    },
+    provider: {
+      local: 'Email + password',
+      google: 'Google'
+    },
     status: {
       pending: 'Pending',
       new: 'New',
@@ -2640,6 +2734,78 @@ async function saveBookingAdmin(bookingId) {
   }
 }
 
+function getAdminRoleLabel(role, labels) {
+  const normalized = normalizeAdminValue(role) === 'admin' ? 'admin' : 'user';
+  return (labels.role && labels.role[normalized]) || normalized;
+}
+
+function getAdminProviderLabel(provider, labels) {
+  const normalized = normalizeAdminValue(provider);
+  if (labels.provider && labels.provider[normalized]) return labels.provider[normalized];
+  return provider || '-';
+}
+
+async function saveUserRoleAdmin(userId) {
+  const labels = getAdminLabels();
+
+  if (!authToken) {
+    showToast(currentLang === 'ru' ? 'Сначала войдите в аккаунт.' : 'Please login first.', 'info');
+    return;
+  }
+
+  const roleEl = document.getElementById(`adminUserRole-${userId}`);
+  if (!roleEl) return;
+
+  const role = normalizeAdminValue(roleEl.value) === 'admin' ? 'admin' : 'user';
+
+  try {
+    const res = await apiFetch(`/api/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + authToken
+      },
+      body: JSON.stringify({ role })
+    });
+
+    const result = await res.json();
+    if (!res.ok) {
+      const message = String(result.error || labels.roleSaveError || '').trim();
+      if (/own admin access/i.test(message)) {
+        showToast(labels.roleSelfError || message, 'error');
+      } else if (/pinned as admin/i.test(message)) {
+        showToast(labels.roleProtectedError || message, 'error');
+      } else {
+        showToast(message || labels.roleSaveError, 'error');
+      }
+      roleEl.value = roleEl.getAttribute('data-current-role') || role;
+      return;
+    }
+
+    if (adminOverviewData && Array.isArray(adminOverviewData.users) && result.user) {
+      const index = adminOverviewData.users.findIndex((item) => Number(item.id) === Number(userId));
+      if (index !== -1) {
+        adminOverviewData.users[index] = {
+          ...adminOverviewData.users[index],
+          ...result.user
+        };
+      }
+    }
+
+    if (currentUser && Number(currentUser.id) === Number(userId)) {
+      currentUser.role = result.user && result.user.role ? result.user.role : currentUser.role;
+      localStorage.setItem('quantum_user', JSON.stringify(currentUser));
+      updateUIForLoggedIn();
+    }
+
+    renderAdminOverview(adminOverviewData);
+    showToast(labels.roleSaved || labels.saved, 'success');
+  } catch (err) {
+    roleEl.value = roleEl.getAttribute('data-current-role') || role;
+    showToast(labels.roleSaveError || labels.saveError, 'error');
+  }
+}
+
 function renderAdminOverview(data) {
   const panelBody = document.getElementById('adminPanelBody');
   if (!panelBody) return;
@@ -2653,7 +2819,7 @@ function renderAdminOverview(data) {
   const searchQuery = normalizeAdminValue(adminFilters.search);
   const bookingStatusFilter = normalizeAdminValue(adminFilters.bookingStatus || 'all');
 
-  const users = usersRaw.filter((user) => matchesAdminSearch(searchQuery, [user.name, user.email, user.phone]));
+  const users = usersRaw.filter((user) => matchesAdminSearch(searchQuery, [user.name, user.email, user.phone, user.role, user.authProvider]));
 
   const bookings = bookingsRaw.filter((booking) => {
     const statusOk = bookingStatusFilter === 'all' || normalizeAdminValue(booking.status) === bookingStatusFilter;
@@ -2704,14 +2870,40 @@ function renderAdminOverview(data) {
               <th>${labels.userName}</th>
               <th>${labels.userEmail}</th>
               <th>${labels.userPhone}</th>
+              <th>${labels.userRole}</th>
+              <th>${labels.userProvider}</th>
+              <th>${labels.userLastLogin}</th>
               <th>${labels.createdAt}</th>
+              <th>${labels.userManage}</th>
             </tr>
           </thead>
           <tbody>
             ${buildAdminRows(
               users,
-              (user) => `<tr><td>${escapeHtml(user.name || '-')}</td><td>${escapeHtml(user.email || '-')}</td><td>${escapeHtml(user.phone || '-')}</td><td>${escapeHtml(formatAdminDate(user.createdAt))}</td></tr>`,
-              4,
+              (user) => {
+                const userId = Number(user.id);
+                const roleValue = normalizeAdminValue(user.role) === 'admin' ? 'admin' : 'user';
+
+                return `<tr>
+                  <td>${escapeHtml(user.name || '-')}</td>
+                  <td>${escapeHtml(user.email || '-')}</td>
+                  <td>${escapeHtml(user.phone || '-')}</td>
+                  <td>${escapeHtml(getAdminRoleLabel(user.role, labels))}</td>
+                  <td>${escapeHtml(getAdminProviderLabel(user.authProvider, labels))}</td>
+                  <td>${escapeHtml(user.lastLoginAt ? formatAdminDate(user.lastLoginAt) : '-')}</td>
+                  <td>${escapeHtml(formatAdminDate(user.createdAt))}</td>
+                  <td>
+                    <div class="admin-user-role-actions">
+                      <select id="adminUserRole-${userId}" class="admin-status-select" data-current-role="${escapeHtml(roleValue)}">
+                        <option value="user" ${roleValue === 'user' ? 'selected' : ''}>${escapeHtml(getAdminRoleLabel('user', labels))}</option>
+                        <option value="admin" ${roleValue === 'admin' ? 'selected' : ''}>${escapeHtml(getAdminRoleLabel('admin', labels))}</option>
+                      </select>
+                      <button class="btn btn-primary btn-sm" onclick="saveUserRoleAdmin(${userId})">${escapeHtml(labels.save)}</button>
+                    </div>
+                  </td>
+                </tr>`;
+              },
+              8,
               labels.emptyUsers
             )}
           </tbody>

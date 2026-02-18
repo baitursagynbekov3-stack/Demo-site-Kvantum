@@ -1879,6 +1879,65 @@ app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
   }
 });
 
+// Admin user role update
+app.patch('/api/admin/users/:id/role', authenticateAdmin, authRateLimiter, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    const nextRole = String(req.body.role || '').trim().toLowerCase();
+
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'Invalid user id' });
+    }
+
+    if (!USER_ROLES.has(nextRole)) {
+      return res.status(400).json({ error: 'Invalid user role' });
+    }
+
+    if (Number(req.user && req.user.id) === userId && nextRole !== 'admin') {
+      return res.status(400).json({ error: 'You cannot remove your own admin access' });
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        role: true
+      }
+    });
+
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (isAdminEmail(existingUser.email) && nextRole !== 'admin') {
+      return res.status(400).json({ error: 'This user is pinned as admin in environment config' });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { role: nextRole },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        authProvider: true,
+        createdAt: true,
+        lastLoginAt: true
+      }
+    });
+
+    return res.json({
+      message: 'User role updated successfully',
+      user
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Admin dashboard data
 app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
   try {
@@ -1904,7 +1963,10 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
           name: true,
           email: true,
           phone: true,
-          createdAt: true
+          role: true,
+          authProvider: true,
+          createdAt: true,
+          lastLoginAt: true
         }
       }),
       prisma.booking.findMany({
