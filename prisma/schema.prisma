@@ -21,6 +21,7 @@ model User {
   lastLoginAt  DateTime?
   bookings     Booking[]
   payments     Payment[]
+  adminAudits  AdminAudit[] @relation("AdminAuditActor")
 
   @@index([role])
 }
@@ -53,6 +54,21 @@ model Payment {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+model AdminAudit {
+  id          Int      @id @default(autoincrement())
+  adminUserId Int?
+  action      String
+  targetType  String
+  targetId    String?
+  details     Json?
+  createdAt   DateTime @default(now())
+  adminUser   User?    @relation("AdminAuditActor", fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model Content {

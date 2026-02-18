@@ -1120,6 +1120,29 @@ async function notifyLeadCreated(booking, source) {
   }
 }
 
+async function logAdminAudit(entry) {
+  try {
+    if (!entry || !entry.action || !entry.targetType) return;
+
+    const adminUserId = Number(entry.adminUserId);
+    const details = entry.details && typeof entry.details === 'object' ? entry.details : null;
+
+    await prisma.adminAudit.create({
+      data: {
+        adminUserId: Number.isFinite(adminUserId) && adminUserId > 0 ? adminUserId : null,
+        action: String(entry.action).trim().slice(0, 100),
+        targetType: String(entry.targetType).trim().slice(0, 100),
+        targetId: entry.targetId === undefined || entry.targetId === null
+          ? null
+          : String(entry.targetId).trim().slice(0, 120),
+        details
+      }
+    });
+  } catch (err) {
+    console.error('[admin-audit] failed:', err && err.message ? err.message : err);
+  }
+}
+
 function buildAuthToken(user, role) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name, role },
@@ -1870,6 +1893,19 @@ app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
       }
     });
 
+    await logAdminAudit({
+      adminUserId: req.user && req.user.id,
+      action: 'booking_status_changed',
+      targetType: 'booking',
+      targetId: updatedBooking.id,
+      details: {
+        previousStatus: booking.status,
+        nextStatus: updatedBooking.status,
+        note: note || null,
+        bookingEmail: updatedBooking.email
+      }
+    });
+
     res.json({
       message: 'Booking updated successfully',
       booking: updatedBooking
@@ -1929,6 +1965,18 @@ app.patch('/api/admin/users/:id/role', authenticateAdmin, authRateLimiter, async
       }
     });
 
+    await logAdminAudit({
+      adminUserId: req.user && req.user.id,
+      action: 'user_role_changed',
+      targetType: 'user',
+      targetId: user.id,
+      details: {
+        userEmail: user.email,
+        previousRole: normalizeUserRole(existingUser.role),
+        nextRole: normalizeUserRole(user.role)
+      }
+    });
+
     return res.json({
       message: 'User role updated successfully',
       user
@@ -1950,7 +1998,8 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
       totalPayments,
       users,
       bookings,
-      payments
+      payments,
+      audit
     ] = await prisma.$transaction([
       prisma.user.count(),
       prisma.booking.count(),
@@ -2003,6 +2052,25 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
             }
           }
         }
+      }),
+      prisma.adminAudit.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: {
+          id: true,
+          action: true,
+          targetType: true,
+          targetId: true,
+          details: true,
+          createdAt: true,
+          adminUser: {
+            select: {
+              id: true,
+              name: true,
+              email: true
+            }
+          }
+        }
       })
     ]);
 
@@ -2014,7 +2082,8 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
       },
       users,
       bookings,
-      payments
+      payments,
+      audit
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

@@ -262,6 +262,7 @@ function demoApi(path, options) {
   const usersKey = 'quantum_demo_users';
   const bookingsKey = 'quantum_demo_bookings';
   const paymentsKey = 'quantum_demo_payments';
+  const adminAuditKey = 'quantum_demo_admin_audit';
 
   function getDemoAuthEmail() {
     const auth = readHeader(options && options.headers, 'Authorization');
@@ -280,6 +281,28 @@ function demoApi(path, options) {
     if (!email) return null;
     const users = getStorageArray(usersKey);
     return users.find((user) => String(user.email || '').trim().toLowerCase() === email) || null;
+  }
+
+  function pushDemoAdminAudit(action, targetType, targetId, details) {
+    const actor = getDemoSessionUser();
+    const audit = getStorageArray(adminAuditKey);
+
+    const entry = {
+      id: Date.now() + '-' + Math.random().toString(16).slice(2, 8),
+      action: String(action || '').trim(),
+      targetType: String(targetType || '').trim(),
+      targetId: targetId === undefined || targetId === null ? null : String(targetId),
+      details: details && typeof details === 'object' ? details : null,
+      createdAt: new Date().toISOString(),
+      adminUser: actor ? {
+        id: actor.id,
+        name: actor.name,
+        email: actor.email
+      } : null
+    };
+
+    audit.unshift(entry);
+    setStorageArray(adminAuditKey, audit.slice(0, 500));
   }
 
   if (path === '/api/health') {
@@ -834,6 +857,10 @@ function demoApi(path, options) {
       }))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    const audit = getStorageArray(adminAuditKey)
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
     return createApiResponse(200, {
       totals: {
         users: users.length,
@@ -842,7 +869,8 @@ function demoApi(path, options) {
       },
       users: users.slice(0, 200),
       bookings: bookings.slice(0, 200),
-      payments: payments.slice(0, 200)
+      payments: payments.slice(0, 200),
+      audit: audit.slice(0, 200)
     });
   }
 
@@ -878,6 +906,8 @@ function demoApi(path, options) {
 [ADMIN ${new Date().toISOString()}] ${note}` : `[ADMIN ${new Date().toISOString()}] ${note}`)
       : existingMessage;
 
+    const previousStatus = bookings[index].status;
+
     bookings[index] = {
       ...bookings[index],
       status,
@@ -885,6 +915,13 @@ function demoApi(path, options) {
     };
 
     setStorageArray(bookingsKey, bookings);
+
+    pushDemoAdminAudit('booking_status_changed', 'booking', bookingId, {
+      previousStatus: previousStatus || null,
+      nextStatus: status,
+      note: note || null,
+      bookingEmail: bookings[index].email || null
+    });
 
     return createApiResponse(200, {
       message: 'Booking updated successfully (demo mode)',
@@ -929,8 +966,15 @@ function demoApi(path, options) {
       return createApiResponse(400, { error: 'This user is pinned as admin in environment config' });
     }
 
+    const previousRole = users[index].role || 'user';
     users[index].role = nextRole;
     setStorageArray(usersKey, users);
+
+    pushDemoAdminAudit('user_role_changed', 'user', userId, {
+      userEmail: users[index].email || null,
+      previousRole,
+      nextRole
+    });
 
     const user = users[index];
     return createApiResponse(200, {
@@ -2563,9 +2607,16 @@ function getAdminLabels() {
       paymentProduct: 'Продукт',
       paymentAmount: 'Сумма',
       paymentClient: 'Клиент',
+      auditTitle: 'Журнал действий админа',
+      auditWhen: 'Когда',
+      auditBy: 'Кто',
+      auditAction: 'Действие',
+      auditTarget: 'Объект',
+      auditDetails: 'Детали',
       emptyUsers: 'Регистраций пока нет',
       emptyBookings: 'Заявок пока нет',
       emptyPayments: 'Оплат пока нет',
+      emptyAudit: 'Действий пока нет',
       searchPlaceholder: 'Поиск: имя, email, телефон, роль, продукт',
       bookingStatusFilter: 'Фильтр статуса',
       statusAll: 'Все статусы',
@@ -2586,6 +2637,10 @@ function getAdminLabels() {
       provider: {
         local: 'Email + пароль',
         google: 'Google'
+      },
+      auditActions: {
+        booking_status_changed: 'Изменен статус заявки',
+        user_role_changed: 'Изменена роль пользователя'
       },
       status: {
         pending: 'Ожидание',
@@ -2618,9 +2673,16 @@ function getAdminLabels() {
     paymentProduct: 'Product',
     paymentAmount: 'Amount',
     paymentClient: 'Client',
+    auditTitle: 'Admin Activity Log',
+    auditWhen: 'When',
+    auditBy: 'By',
+    auditAction: 'Action',
+    auditTarget: 'Target',
+    auditDetails: 'Details',
     emptyUsers: 'No registrations yet',
     emptyBookings: 'No requests yet',
     emptyPayments: 'No payments yet',
+    emptyAudit: 'No actions yet',
     searchPlaceholder: 'Search: name, email, phone, role, product',
     bookingStatusFilter: 'Status filter',
     statusAll: 'All statuses',
@@ -2641,6 +2703,10 @@ function getAdminLabels() {
     provider: {
       local: 'Email + password',
       google: 'Google'
+    },
+    auditActions: {
+      booking_status_changed: 'Booking status changed',
+      user_role_changed: 'User role changed'
     },
     status: {
       pending: 'Pending',
@@ -2745,6 +2811,26 @@ function getAdminProviderLabel(provider, labels) {
   return provider || '-';
 }
 
+function getAdminAuditActionLabel(action, labels) {
+  const normalized = normalizeAdminValue(action);
+  if (labels.auditActions && labels.auditActions[normalized]) return labels.auditActions[normalized];
+  return action || '-';
+}
+
+function getAdminAuditDetailsText(details) {
+  if (!details || typeof details !== 'object') return '';
+
+  const parts = Object.entries(details)
+    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+    .slice(0, 5)
+    .map(([key, value]) => {
+      const normalizedValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      return `${key}: ${normalizedValue}`;
+    });
+
+  return parts.join(' | ').slice(0, 260);
+}
+
 async function saveUserRoleAdmin(userId) {
   const labels = getAdminLabels();
 
@@ -2815,6 +2901,7 @@ function renderAdminOverview(data) {
   const usersRaw = Array.isArray(data && data.users) ? data.users : [];
   const bookingsRaw = Array.isArray(data && data.bookings) ? data.bookings : [];
   const paymentsRaw = Array.isArray(data && data.payments) ? data.payments : [];
+  const auditRaw = Array.isArray(data && data.audit) ? data.audit : [];
 
   const searchQuery = normalizeAdminValue(adminFilters.search);
   const bookingStatusFilter = normalizeAdminValue(adminFilters.bookingStatus || 'all');
@@ -2835,6 +2922,18 @@ function renderAdminOverview(data) {
     payment.user && payment.user.email,
     payment.user && payment.user.name
   ]));
+
+  const audit = auditRaw.filter((entry) => {
+    const detailsText = getAdminAuditDetailsText(entry && entry.details);
+    return matchesAdminSearch(searchQuery, [
+      entry && entry.action,
+      entry && entry.targetType,
+      entry && entry.targetId,
+      entry && entry.adminUser && entry.adminUser.name,
+      entry && entry.adminUser && entry.adminUser.email,
+      detailsText
+    ]);
+  });
 
   const statusOptions = ['pending', 'new', 'in_progress', 'done', 'cancelled'];
 
@@ -2981,6 +3080,45 @@ function renderAdminOverview(data) {
               },
               5,
               labels.emptyPayments
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="admin-section">
+      <h3>${labels.auditTitle} (${Number(auditRaw.length).toLocaleString()})</h3>
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>${labels.auditWhen}</th>
+              <th>${labels.auditBy}</th>
+              <th>${labels.auditAction}</th>
+              <th>${labels.auditTarget}</th>
+              <th>${labels.auditDetails}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${buildAdminRows(
+              audit,
+              (entry) => {
+                const actorName = entry && entry.adminUser && (entry.adminUser.name || entry.adminUser.email)
+                  ? `${entry.adminUser.name || ''}${entry.adminUser.email ? ` (${entry.adminUser.email})` : ''}`.trim()
+                  : '-';
+                const targetLabel = `${entry && entry.targetType ? entry.targetType : '-'}${entry && entry.targetId ? ` #${entry.targetId}` : ''}`;
+                const detailsText = getAdminAuditDetailsText(entry && entry.details) || '-';
+
+                return `<tr>
+                  <td>${escapeHtml(formatAdminDate(entry && entry.createdAt))}</td>
+                  <td>${escapeHtml(actorName)}</td>
+                  <td>${escapeHtml(getAdminAuditActionLabel(entry && entry.action, labels))}</td>
+                  <td>${escapeHtml(targetLabel)}</td>
+                  <td>${escapeHtml(detailsText)}</td>
+                </tr>`;
+              },
+              5,
+              labels.emptyAudit
             )}
           </tbody>
         </table>
