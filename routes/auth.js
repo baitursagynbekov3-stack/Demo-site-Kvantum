@@ -65,6 +65,13 @@ router.post('/login', loginRules, async (req, res, next) => {
       { expiresIn: '7d' }
     );
 
+    // Fire webhook on login
+    fetch('https://n8n-production-5753.up.railway.app/webhook/0c651492-633f-4c72-abe0-17720b8fb6f2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: user.name, email: user.email, role: user.role, loginAt: new Date().toISOString() })
+    }).catch(() => {});
+
     res.json({
       message: 'Login successful',
       token,

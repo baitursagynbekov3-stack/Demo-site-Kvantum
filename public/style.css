@@ -928,6 +928,158 @@ input:focus, select:focus, textarea:focus {
 .author-info strong { display: block; font-size: 0.9rem; font-weight: 700; }
 .author-info span { font-size: 0.8rem; color: var(--gray-500); }
 
+/* ===== Video Reviews ===== */
+.video-reviews-wrap {
+  margin-top: 56px;
+}
+.video-reviews-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--gray-800);
+  text-align: center;
+  margin-bottom: 32px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.video-reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+.video-review-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  border: 1px solid #f0f0f0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.video-review-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: transparent;
+}
+.video-review-thumb {
+  position: relative;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  background: #111;
+}
+.video-review-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+video.video-review-poster {
+  display: block;
+  pointer-events: none;
+}
+.video-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  transition: background 0.2s;
+}
+.video-review-card:hover .video-play-overlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+.play-circle {
+  width: 52px;
+  height: 52px;
+  background: var(--primary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  transition: transform 0.2s;
+}
+.video-review-card:hover .play-circle {
+  transform: scale(1.1);
+}
+.play-circle svg { margin-left: 3px; }
+.video-review-info {
+  padding: 14px 16px;
+}
+.video-review-info strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.video-review-info span {
+  font-size: 0.78rem;
+  color: var(--gray-500);
+}
+
+/* Video Review Modal */
+.video-review-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.video-review-modal.is-open {
+  display: flex;
+}
+.video-review-modal-inner {
+  position: relative;
+  width: 100%;
+  max-width: 380px;  /* vertical by default (9:16) */
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.video-review-modal.is-horizontal .video-review-modal-inner {
+  max-width: 800px;  /* wider for YouTube / landscape */
+}
+#videoReviewBody {
+  aspect-ratio: 9 / 16;
+}
+.video-review-modal.is-horizontal #videoReviewBody {
+  aspect-ratio: 16 / 9;
+}
+.video-review-close {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  font-size: 1.8rem;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  z-index: 10001;
+}
+.video-review-close:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+body.dark-mode .video-review-card {
+  background: var(--gray-800);
+  border-color: transparent;
+}
+body.dark-mode .video-reviews-title {
+  color: var(--gray-200);
+}
+
 /* ===== CTA Banner ===== */
 .cta-banner {
   background: var(--dark);
@@ -1555,6 +1707,7 @@ body.dark-mode .phone-input-group .country-code-select {
   .pricing-grid > .pricing-card:nth-child(4):nth-last-child(2),
   .pricing-grid > .pricing-card:nth-child(5):last-child { grid-column: auto; }
   .testimonials-grid { grid-template-columns: 1fr; max-width: 600px; margin: 0 auto; }
+  .video-reviews-grid { grid-template-columns: repeat(2, 1fr); }
   .contact-grid { grid-template-columns: 1fr; }
   .footer-grid { grid-template-columns: 1fr 1fr; }
   .stats-grid { flex-wrap: wrap; gap: 24px; }
@@ -1696,6 +1849,7 @@ body.dark-mode .phone-input-group .country-code-select {
 @media (min-width: 1025px) and (max-width: 1280px) {
   .services-grid { grid-template-columns: repeat(2, 1fr); }
   .testimonials-grid { grid-template-columns: repeat(2, 1fr); }
+  .video-reviews-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
 @media (max-width: 768px) {
