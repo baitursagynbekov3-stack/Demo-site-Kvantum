@@ -1609,8 +1609,9 @@ function initCounterAnimations() {
       if (entry.isIntersecting && !animated) {
         animated = true;
         counters.forEach(counter => {
-          const target = parseInt(counter.getAttribute('data-count'));
-          animateCounter(counter, target);
+          const target = parseInt(counter.getAttribute('data-count'), 10);
+          const startValue = parseInt(counter.getAttribute('data-count-from') || '', 10);
+          animateCounter(counter, target, Number.isFinite(startValue) ? startValue : 0);
         });
       }
     });
@@ -1621,17 +1622,17 @@ function initCounterAnimations() {
   }
 }
 
-function animateCounter(el, target) {
+function animateCounter(el, target, startVal) {
   const duration = 2000;
   const start = performance.now();
-  const startVal = 0;
+  const from = Number.isFinite(startVal) ? startVal : 0;
 
   function update(now) {
     const elapsed = now - start;
     const progress = Math.min(elapsed / duration, 1);
     // Ease out cubic
     const eased = 1 - Math.pow(1 - progress, 3);
-    const current = Math.floor(startVal + (target - startVal) * eased);
+    const current = Math.floor(from + (target - from) * eased);
 
     el.textContent = current.toLocaleString();
 
