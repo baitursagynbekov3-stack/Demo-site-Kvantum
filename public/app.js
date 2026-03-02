@@ -813,6 +813,10 @@ const translations = {
     'user.purchases': 'Мои покупки',
     'user.admin': 'Админ панель',
     'user.logout': 'Выйти',
+    'profile.edit_title': 'Редактировать данные',
+    'profile.save': 'Сохранить изменения',
+    'profile.bookings_title': 'Мои записи',
+    'profile.password_note': 'Для смены пароля воспользуйтесь функцией <a href="#" onclick="closeModal(\'profileModal\'); openModal(\'loginModal\');">Забыли пароль?</a> на экране входа.',
     'admin.title': 'Админ панель',
     'admin.desc': 'Последние регистрации, заявки и оплаты.',
     'admin.loading': 'Загрузка данных...',
@@ -1364,9 +1368,135 @@ function handleLogout() {
   showToast('You have been logged out.', 'info');
 }
 
-function showProfile() {
-  showToast('Profile page coming soon!', 'info');
+async function showProfile() {
   document.getElementById('userDropdown').style.display = 'none';
+  openModal('profileModal');
+
+  try {
+    const [profRes, bookRes] = await Promise.all([
+      apiFetch('/api/profile', { headers: { 'Authorization': 'Bearer ' + authToken } }),
+      apiFetch('/api/profile/bookings', { headers: { 'Authorization': 'Bearer ' + authToken } })
+    ]);
+
+    if (!profRes.ok) { showToast('Could not load profile', 'error'); return; }
+    const profile = await profRes.json();
+    const bookings = bookRes.ok ? await bookRes.json() : [];
+
+    // Header
+    const avatarEl = document.getElementById('profileAvatar');
+    const nameEl = document.getElementById('profileDisplayName');
+    const sinceEl = document.getElementById('profileMemberSince');
+    if (avatarEl) avatarEl.textContent = (profile.name || '?').charAt(0).toUpperCase();
+    if (nameEl) nameEl.textContent = profile.name || '';
+    if (sinceEl) {
+      const d = new Date(profile.createdAt);
+      const locale = currentLang === 'ru' ? 'ru-RU' : 'en-US';
+      const label = currentLang === 'ru' ? 'Участник с ' : 'Member since ';
+      sinceEl.textContent = label + d.toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+
+    // Form
+    const form = document.getElementById('profileForm');
+    if (form) {
+      form.querySelector('[name="name"]').value = profile.name || '';
+      form.querySelector('[name="email"]').value = profile.email || '';
+      const phoneInput = form.querySelector('[name="phone"]');
+      const countrySelect = form.querySelector('[name="countryCode"]');
+      if (phoneInput && countrySelect && profile.phone) {
+        const fullPhone = profile.phone.trim();
+        const codes = ['+971', '+996', '+44', '+49', '+81', '+82', '+86', '+90', '+91', '+33', '+34', '+39', '+61', '+7', '+1'];
+        let matched = '';
+        for (const code of codes) {
+          if (fullPhone.startsWith(code)) { matched = code; break; }
+        }
+        if (matched) {
+          countrySelect.value = matched;
+          phoneInput.value = fullPhone.slice(matched.length).replace(/^\s+/, '');
+        } else {
+          phoneInput.value = fullPhone;
+        }
+      }
+    }
+
+    renderProfileBookings(bookings);
+  } catch (err) {
+    showToast('Could not load profile', 'error');
+  }
+}
+
+async function handleProfileSave(e) {
+  e.preventDefault();
+  const form = e.target;
+  const phone = normalizePhone(form.phone.value, form.countryCode.value);
+  const submitBtn = form.querySelector('[type="submit"]');
+  submitBtn.disabled = true;
+
+  try {
+    const res = await apiFetch('/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+      body: JSON.stringify({ name: form.name.value, email: form.email.value, phone })
+    });
+    const result = await res.json();
+
+    if (res.ok) {
+      currentUser = result.user;
+      authToken = result.token;
+      localStorage.setItem('quantum_user', JSON.stringify(result.user));
+      localStorage.setItem('quantum_token', result.token);
+      updateUIForLoggedIn();
+      document.getElementById('profileDisplayName').textContent = result.user.name;
+      document.getElementById('profileAvatar').textContent = result.user.name.charAt(0).toUpperCase();
+      showToast(currentLang === 'ru' ? 'Профиль обновлён!' : 'Profile updated!', 'success');
+    } else {
+      showToast(result.error || 'Update failed', 'error');
+    }
+  } catch (err) {
+    showToast('Could not save profile', 'error');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+function renderProfileBookings(bookings) {
+  const container = document.getElementById('profileBookingsList');
+  if (!container) return;
+
+  if (!bookings || bookings.length === 0) {
+    container.innerHTML = '<p class="profile-no-bookings">' + (currentLang === 'ru' ? 'Нет записей.' : 'No bookings yet.') + '</p>';
+    return;
+  }
+
+  const statusLabels = {
+    pending: currentLang === 'ru' ? 'Ожидает' : 'Pending',
+    new: currentLang === 'ru' ? 'Новая' : 'New',
+    in_progress: currentLang === 'ru' ? 'В работе' : 'In progress',
+    done: currentLang === 'ru' ? 'Завершена' : 'Done',
+    cancelled: currentLang === 'ru' ? 'Отменена' : 'Cancelled'
+  };
+
+  const serviceLabels = {
+    consultation: currentLang === 'ru' ? 'Консультация' : 'Consultation',
+    'brain-charge': 'Brain Charge',
+    'resources-club': currentLang === 'ru' ? 'Клуб «Ресурс»' : 'Club "Resources"',
+    intensive: currentLang === 'ru' ? 'Интенсив' : 'Intensive',
+    reboot: 'REBOOT',
+    mentorship: currentLang === 'ru' ? 'Менторство' : 'Mentorship'
+  };
+
+  container.innerHTML = bookings.map(b => {
+    const locale = currentLang === 'ru' ? 'ru-RU' : 'en-US';
+    const date = new Date(b.createdAt).toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' });
+    const service = serviceLabels[b.service] || b.service;
+    const status = statusLabels[b.status] || b.status;
+    return `<div class="profile-booking-item">
+      <div class="profile-booking-info">
+        <span class="profile-booking-service">${escapeHtml(service)}</span>
+        <span class="profile-booking-date">${escapeHtml(date)}</span>
+      </div>
+      <span class="booking-status booking-status--${escapeHtml(b.status)}">${escapeHtml(status)}</span>
+    </div>`;
+  }).join('');
 }
 
 function showPurchases() {

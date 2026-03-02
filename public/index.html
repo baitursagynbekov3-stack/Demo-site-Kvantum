@@ -814,6 +814,60 @@
     </div>
   </div>
 
+  <!-- Profile Modal -->
+  <div class="modal-overlay" id="profileModal">
+    <div class="modal profile-modal">
+      <button class="modal-close" onclick="closeModal('profileModal')">&times;</button>
+      <div class="profile-modal-header">
+        <div class="profile-avatar-lg" id="profileAvatar"></div>
+        <div class="profile-header-info">
+          <div class="profile-display-name" id="profileDisplayName"></div>
+          <div class="profile-meta" id="profileMemberSince"></div>
+        </div>
+      </div>
+      <form id="profileForm" class="modal-form" onsubmit="handleProfileSave(event)">
+        <h3 class="profile-section-title" data-i18n="profile.edit_title">Edit Information</h3>
+        <div class="form-group">
+          <label data-i18n="modal.fullname">Full Name</label>
+          <input type="text" name="name" data-i18n-placeholder="modal.fullname_ph" placeholder="Your full name" required>
+        </div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" name="email" placeholder="your@email.com" required>
+        </div>
+        <div class="form-group">
+          <label data-i18n="consult.phone">Phone (WhatsApp/Telegram)</label>
+          <div class="phone-input-group">
+            <select class="country-code-select" name="countryCode">
+              <option value="+996">+996 KG</option>
+              <option value="+1">+1 US</option>
+              <option value="+7">+7 RU/KZ</option>
+              <option value="+44">+44 UK</option>
+              <option value="+49">+49 DE</option>
+              <option value="+90">+90 TR</option>
+              <option value="+82">+82 KR</option>
+              <option value="+86">+86 CN</option>
+              <option value="+91">+91 IN</option>
+              <option value="+971">+971 AE</option>
+              <option value="+81">+81 JP</option>
+              <option value="+33">+33 FR</option>
+              <option value="+39">+39 IT</option>
+              <option value="+34">+34 ES</option>
+              <option value="+61">+61 AU</option>
+            </select>
+            <input type="tel" name="phone" placeholder="555 123 456" required>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" data-i18n="profile.save">Save Changes</button>
+      </form>
+      <p class="profile-password-note" data-i18n-html="profile.password_note">To change your password, use <a href="#" onclick="closeModal('profileModal'); openModal('loginModal');">Forgot Password</a> on the login screen.</p>
+      <div class="profile-bookings-section">
+        <h3 class="profile-section-title" data-i18n="profile.bookings_title">My Bookings</h3>
+        <div id="profileBookingsList" class="profile-bookings-list"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Payment Modal -->
   <div class="modal-overlay" id="paymentModal">
     <div class="modal">

@@ -1403,11 +1403,58 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user.id },
-      select: { id: true, name: true, email: true, phone: true, role: true }
+      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true }
     });
 
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user profile
+app.patch('/api/profile', authenticateToken, async (req, res) => {
+  try {
+    const { name, email, phone } = req.body;
+    const trimmedName = String(name || '').trim();
+    const trimmedEmail = String(email || '').trim().toLowerCase();
+    const normalizedPhone = normalizePhone(phone);
+
+    if (!trimmedName) return res.status(400).json({ error: 'Name is required' });
+    if (!isValidEmail(trimmedEmail)) return res.status(400).json({ error: 'Invalid email format' });
+    if (!normalizedPhone) return res.status(400).json({ error: 'Phone with country code is required' });
+
+    // Check email not taken by another user
+    const existing = await prisma.user.findUnique({ where: { email: trimmedEmail } });
+    if (existing && existing.id !== req.user.id) {
+      return res.status(400).json({ error: 'Email already in use' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.user.id },
+      data: { name: trimmedName, email: trimmedEmail, phone: normalizedPhone },
+      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true }
+    });
+
+    const role = isAdminEmail(updated.email) ? 'admin' : normalizeUserRole(updated.role);
+    const token = buildAuthToken(updated, role);
+    res.json({ user: buildPublicUser(updated, role), token });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get user's bookings (matched by email)
+app.get('/api/profile/bookings', authenticateToken, async (req, res) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { email: req.user.email },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { id: true, service: true, status: true, createdAt: true }
+    });
+    res.json(bookings);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
