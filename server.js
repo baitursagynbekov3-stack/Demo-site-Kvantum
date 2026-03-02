@@ -32,11 +32,13 @@ const OPENAI_MODEL = (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
-const RESEND_FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || 'noreply@kvantum.app').trim();
+const RESEND_FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || 'noreply@kvantum.us').trim();
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 const DEFAULT_ALLOWED_ORIGINS = [
-  'https://kvantum-api.vercel.app'
+  'https://kvantum-api.vercel.app',
+  'https://kvantum.us',
+  'https://www.kvantum.us'
 ];
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || DEFAULT_ALLOWED_ORIGINS.join(','))
   .split(',')
@@ -1513,6 +1515,41 @@ app.post('/api/book-consultation', async (req, res) => {
     });
 
     await notifyLeadCreated(booking, 'website-form');
+
+    // Send confirmation email to the client
+    if (resend) {
+      const serviceLabels = {
+        consultation: 'Free Consultation',
+        'brain-charge': 'Brain Charge',
+        'resources-club': 'Club "Resources"',
+        intensive: 'Intensive "Mom & Dad"',
+        reboot: 'REBOOT',
+        mentorship: 'Mentorship'
+      };
+      const serviceLabel = serviceLabels[booking.service] || booking.service;
+
+      resend.emails.send({
+        from: RESEND_FROM_EMAIL,
+        to: normalizedEmail,
+        subject: 'KVANTUM — Your consultation request is confirmed',
+        html: `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:32px;background:#fff;">
+            <h2 style="color:#c41e1e;margin-bottom:4px;">KVANTUM</h2>
+            <p style="color:#888;font-size:13px;margin-top:0;">by Altynai Eshinbekova</p>
+            <h3 style="color:#111;margin-top:24px;">Hi ${name}, your request is received! 🎉</h3>
+            <p style="color:#444;line-height:1.6;">Thank you for reaching out. We've received your consultation request and will contact you via WhatsApp or Telegram shortly to confirm your time.</p>
+            <div style="background:#f7f7f8;border-radius:12px;padding:20px;margin:24px 0;">
+              <p style="margin:0 0 8px;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.05em;">Your request</p>
+              <p style="margin:0 0 4px;color:#111;"><strong>Service:</strong> ${serviceLabel}</p>
+              <p style="margin:0 0 4px;color:#111;"><strong>Phone:</strong> ${normalizedPhone}</p>
+              <p style="margin:0;color:#111;"><strong>Status:</strong> Pending confirmation</p>
+            </div>
+            <p style="color:#444;line-height:1.6;">If you have any questions in the meantime, feel free to reply to this email.</p>
+            <p style="color:#888;font-size:12px;margin-top:32px;">— The KVANTUM Team</p>
+          </div>
+        `
+      }).catch(() => {});
+    }
 
     res.json({
       message: 'Consultation booked successfully! We will contact you via WhatsApp/Telegram.',
