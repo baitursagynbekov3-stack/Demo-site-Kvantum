@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const crypto = require('crypto');
 const { PrismaClient } = require('@prisma/client');
+const { Resend } = require('resend');
 
 const prisma = global.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== 'production') {
@@ -30,6 +31,9 @@ const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
+const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
+const RESEND_FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || 'noreply@kvantum.app').trim();
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 const DEFAULT_ALLOWED_ORIGINS = [
   'https://kvantum-api.vercel.app'
@@ -1316,7 +1320,31 @@ app.post('/api/reset-password/request-code', resetRateLimiter, async (req, res) 
     }
 
     let delivered = false;
-    if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
+
+    // Send code to user's email via Resend
+    if (resend) {
+      try {
+        await resend.emails.send({
+          from: RESEND_FROM_EMAIL,
+          to: email,
+          subject: 'KVANTUM — Password Reset Code',
+          html: `
+            <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;background:#fff;">
+              <h2 style="color:#c41e1e;margin-bottom:8px;">KVANTUM</h2>
+              <p style="color:#444;">You requested a password reset. Use the code below:</p>
+              <div style="font-size:36px;font-weight:700;letter-spacing:8px;color:#111;padding:24px 0;">${resetCode}</div>
+              <p style="color:#888;font-size:13px;">This code expires in ${Math.floor(RESET_CODE_TTL_MS / 60000)} minutes. If you didn't request this, ignore this email.</p>
+            </div>
+          `
+        });
+        delivered = true;
+      } catch (err) {
+        delivered = false;
+      }
+    }
+
+    // Fallback: send to Telegram admin channel
+    if (!delivered && TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       const note = [
         'KVANTUM password reset verification code',
         `Email: ${email}`,
@@ -1324,8 +1352,6 @@ app.post('/api/reset-password/request-code', resetRateLimiter, async (req, res) 
         `Code: ${resetCode}`,
         `Expires in: ${Math.floor(RESET_CODE_TTL_MS / 60000)} minutes`
       ].join('\n');
-
-
       try {
         await sendTelegramText(note);
         delivered = true;
