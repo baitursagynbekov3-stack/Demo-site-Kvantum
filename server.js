@@ -1516,6 +1516,23 @@ app.post('/api/book-consultation', async (req, res) => {
 
     await notifyLeadCreated(booking, 'website-form');
 
+    // Fire n8n consultation workflow
+    if (process.env.N8N_CONSULTATION_WEBHOOK_URL) {
+      fetch(process.env.N8N_CONSULTATION_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: String(booking.id),
+          name: booking.name,
+          email: booking.email,
+          phone: booking.phone,
+          service: booking.service,
+          source: 'website-form',
+          timestamp: new Date().toISOString()
+        })
+      }).catch(err => console.error('[n8n consultation webhook] failed:', err.message));
+    }
+
     // Send confirmation email to the client
     if (resend) {
       const serviceLabels = {
