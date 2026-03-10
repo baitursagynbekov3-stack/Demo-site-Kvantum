@@ -31,6 +31,9 @@ const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
+const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
+const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
+const EMAIL_REPLY_TO = (process.env.EMAIL_REPLY_TO || '').trim();
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
 const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
@@ -48,6 +51,10 @@ const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com')
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const LEAD_NOTIFICATION_EMAILS = (process.env.LEAD_NOTIFICATION_EMAILS || ADMIN_EMAILS.join(','))
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter((email, index, list) => email && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) && list.indexOf(email) === index);
 
 const USER_ROLES = new Set(['user', 'admin']);
 const ALLOWED_BOOKING_STATUSES = new Set(['pending', 'new', 'in_progress', 'done', 'cancelled']);
@@ -1106,6 +1113,109 @@ function buildLeadNotificationText(booking, source) {
   ].join('\n');
 }
 
+function canSendEmail() {
+  return Boolean(RESEND_API_KEY && EMAIL_FROM);
+}
+
+async function sendResendEmail({ to, subject, text, replyTo }) {
+  if (!canSendEmail()) {
+    return { ok: false, skipped: true, reason: 'email-not-configured' };
+  }
+
+  const recipients = (Array.isArray(to) ? to : [to])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter((value, index, list) => value && isValidEmail(value) && list.indexOf(value) === index);
+
+  if (recipients.length === 0) {
+    return { ok: false, skipped: true, reason: 'empty-recipients' };
+  }
+
+  const payload = {
+    from: EMAIL_FROM,
+    to: recipients,
+    subject: String(subject || 'KVANTUM notification').trim().slice(0, 200),
+    text: String(text || '').trim().slice(0, 12000)
+  };
+
+  const replyToAddress = String(replyTo || EMAIL_REPLY_TO || '').trim().toLowerCase();
+  if (replyToAddress && isValidEmail(replyToAddress)) {
+    payload.reply_to = replyToAddress;
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Resend error ${response.status}: ${errorText}`);
+  }
+
+  const result = await response.json().catch(() => null);
+  return { ok: true, id: result && result.id ? result.id : null };
+}
+
+async function sendResetCodeEmail(email, resetCode) {
+  if (!email || !resetCode) return { ok: false, skipped: true, reason: 'missing-data' };
+
+  const ttlMinutes = Math.floor(RESET_CODE_TTL_MS / 60000);
+  const body = [
+    'KVANTUM password reset code',
+    '',
+    `Code: ${resetCode}`,
+    `Expires in: ${ttlMinutes} minutes`,
+    '',
+    'If you did not request a password reset, ignore this email.'
+  ].join('\n');
+
+  return sendResendEmail({
+    to: email,
+    subject: 'KVANTUM password reset code',
+    text: body
+  });
+}
+
+async function sendLeadNotificationEmail(booking, source) {
+  if (!booking || LEAD_NOTIFICATION_EMAILS.length === 0) {
+    return { ok: false, skipped: true, reason: 'no-notification-recipients' };
+  }
+
+  return sendResendEmail({
+    to: LEAD_NOTIFICATION_EMAILS,
+    subject: `New KVANTUM lead #${booking.id} (${source})`,
+    text: buildLeadNotificationText(booking, source),
+    replyTo: booking.email
+  });
+}
+
+async function sendLeadConfirmationEmail(booking) {
+  const targetEmail = String(booking && booking.email ? booking.email : '').trim().toLowerCase();
+  if (!targetEmail || !isValidEmail(targetEmail)) {
+    return { ok: false, skipped: true, reason: 'invalid-target-email' };
+  }
+
+  const body = [
+    `Здравствуйте, ${booking.name || 'клиент'}!`,
+    '',
+    'Ваша заявка принята.',
+    `Номер заявки: #${booking.id}`,
+    `Услуга: ${booking.service || 'consultation'}`,
+    '',
+    'Мы свяжемся с вами в ближайшее время.'
+  ].join('\n');
+
+  return sendResendEmail({
+    to: targetEmail,
+    subject: 'KVANTUM: заявка принята',
+    text: body
+  });
+}
+
 async function sendTelegramText(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     return { ok: false, skipped: true };
@@ -1132,13 +1242,32 @@ async function sendTelegramText(text) {
 async function notifyLeadCreated(booking, source) {
   if (!booking) return { ok: false, skipped: true };
 
+  const text = buildLeadNotificationText(booking, source);
+  const report = {};
+
   try {
-    const text = buildLeadNotificationText(booking, source);
-    return await sendTelegramText(text);
+    report.telegram = await sendTelegramText(text);
   } catch (err) {
-    console.error('[lead-notify] failed:', err && err.message ? err.message : err);
-    return { ok: false, skipped: false };
+    report.telegram = { ok: false, skipped: false };
+    console.error('[lead-notify][telegram] failed:', err && err.message ? err.message : err);
   }
+
+  try {
+    report.emailAdmin = await sendLeadNotificationEmail(booking, source);
+  } catch (err) {
+    report.emailAdmin = { ok: false, skipped: false };
+    console.error('[lead-notify][email-admin] failed:', err && err.message ? err.message : err);
+  }
+
+  try {
+    report.emailClient = await sendLeadConfirmationEmail(booking);
+  } catch (err) {
+    report.emailClient = { ok: false, skipped: false };
+    console.error('[lead-notify][email-client] failed:', err && err.message ? err.message : err);
+  }
+
+  const ok = [report.telegram, report.emailAdmin, report.emailClient].some((item) => item && item.ok);
+  return { ok, channels: report };
 }
 
 async function logAdminAudit(entry) {
@@ -1407,6 +1536,7 @@ app.post('/api/reset-password/request-code', resetRateLimiter, async (req, res) 
     }
 
     let delivered = false;
+
     if (TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID) {
       const note = [
         'KVANTUM password reset verification code',
@@ -1416,13 +1546,19 @@ app.post('/api/reset-password/request-code', resetRateLimiter, async (req, res) 
         `Expires in: ${Math.floor(RESET_CODE_TTL_MS / 60000)} minutes`
       ].join('\n');
 
-
       try {
-        await sendTelegramText(note);
-        delivered = true;
+        const telegramResult = await sendTelegramText(note);
+        if (telegramResult && telegramResult.ok) delivered = true;
       } catch (err) {
-        delivered = false;
+        console.error('[reset][telegram] failed:', err && err.message ? err.message : err);
       }
+    }
+
+    try {
+      const emailResult = await sendResetCodeEmail(email, resetCode);
+      if (emailResult && emailResult.ok) delivered = true;
+    } catch (err) {
+      console.error('[reset][email] failed:', err && err.message ? err.message : err);
     }
 
     if (process.env.NODE_ENV !== 'production' || ALLOW_INSECURE_RESET_CODE_RESPONSE) {
