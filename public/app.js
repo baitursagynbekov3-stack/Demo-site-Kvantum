@@ -4140,7 +4140,12 @@ function escapeHtml(text) {
 
 // ===== Social Links =====
 function openWhatsApp() {
-  window.open('https://wa.me/?text=' + encodeURIComponent('Hello! I am interested in QUANTUM programs.'), '_blank');
+  const phone = '996550412941';
+  const message = currentLang === 'ru'
+    ? 'Здравствуйте! Хочу консультацию по программе KVANTUM.'
+    : 'Hello! I would like a consultation about KVANTUM programs.';
+
+  window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener');
 }
 
 function openTelegram() {
