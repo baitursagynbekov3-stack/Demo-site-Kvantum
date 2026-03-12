@@ -4147,7 +4147,7 @@ function openWhatsApp() {
 }
 
 function openTelegram() {
-  window.open('https://t.me/', '_blank');
+  window.open('https://t.me/Altynaimashtab_bot', '_blank', 'noopener');
 }
 
 // ===== Helpers =====
