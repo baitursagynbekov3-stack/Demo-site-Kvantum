@@ -1066,6 +1066,17 @@ input:focus, select:focus, textarea:focus {
 }
 .contact-method-group .radio-card {
   flex: initial;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+}
+.contact-method-group .radio-card input[type="radio"] {
+  display: none;
+}
+.contact-method-group .radio-card span {
+  width: 100%;
+  text-align: center;
 }
 @media (max-width: 560px) {
   .contact-method-group {
