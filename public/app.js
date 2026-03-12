@@ -1154,7 +1154,7 @@ const translations = {
     'hero.description': 'КВАНТУМ от Алтынай Эшинбековой — специалист по работе с подсознанием и квантовым полем. Мастер НЛП. Трансформируйте мысли, чувства и состояние — трансформируйте жизнь, отношения и финансы.',
     'hero.cta': 'Записаться на диагностику подсознания',
     'hero.programs': 'Смотреть программы',
-    'stats.clients': 'Историй трансформации',
+    'stats.clients': 'Трансформированных жизней',
     'stats.satisfaction': 'Удовлетворённость клиентов',
     'stats.years': 'Лет опыта',
     'stats.growth': 'Средний рост',
@@ -1609,7 +1609,7 @@ function initCounterAnimations() {
       if (entry.isIntersecting && !animated) {
         animated = true;
         counters.forEach(counter => {
-          const target = parseInt(counter.getAttribute('data-count'), 10);
+          const target = resolveCounterTarget(counter);
           const startValue = parseInt(counter.getAttribute('data-count-from') || '', 10);
           animateCounter(counter, target, Number.isFinite(startValue) ? startValue : 0);
         });
@@ -1620,6 +1620,31 @@ function initCounterAnimations() {
   if (counters.length > 0) {
     observer.observe(counters[0].closest('.stats-strip'));
   }
+}
+
+function resolveCounterTarget(counterEl) {
+  const explicitTarget = parseInt(counterEl.getAttribute('data-count') || '', 10);
+  if (Number.isFinite(explicitTarget)) return explicitTarget;
+
+  const base = parseInt(counterEl.getAttribute('data-count-base') || '', 10);
+  if (!Number.isFinite(base)) return 0;
+
+  const growthPerDay = parseFloat(counterEl.getAttribute('data-count-growth-per-day') || '0');
+  const growthStartRaw = String(counterEl.getAttribute('data-count-growth-start') || '').trim();
+
+  if (!growthStartRaw || !Number.isFinite(growthPerDay) || growthPerDay <= 0) {
+    return base;
+  }
+
+  const growthStartDate = new Date(growthStartRaw + 'T00:00:00Z');
+  if (Number.isNaN(growthStartDate.getTime())) {
+    return base;
+  }
+
+  const now = new Date();
+  const elapsedMs = now.getTime() - growthStartDate.getTime();
+  const elapsedDays = Math.max(0, Math.floor(elapsedMs / (24 * 60 * 60 * 1000)));
+  return Math.floor(base + elapsedDays * growthPerDay);
 }
 
 function animateCounter(el, target, startVal) {
