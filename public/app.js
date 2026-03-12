@@ -2656,6 +2656,7 @@ function getAdminLabels() {
       bookingsTitle: 'Последние заявки',
       paymentsTitle: 'Последние оплаты',
       clientsTitle: 'Контакты клиентов',
+      adminsPinnedTitle: 'Администраторы (закреплено)',
       userName: 'Имя',
       userEmail: 'Email',
       userPhone: 'Телефон',
@@ -2690,6 +2691,7 @@ function getAdminLabels() {
       emptyBookings: 'Заявок пока нет',
       emptyPayments: 'Оплат пока нет',
       emptyClients: 'Контактов пока нет',
+      emptyAdmins: 'Администраторов нет',
       emptyAudit: 'Действий пока нет',
       searchPlaceholder: 'Поиск: имя, email, телефон, роль, продукт',
       bookingStatusFilter: 'Фильтр статуса',
@@ -2747,6 +2749,7 @@ function getAdminLabels() {
     bookingsTitle: 'Latest Requests',
     paymentsTitle: 'Latest Payments',
     clientsTitle: 'Client Contacts',
+    adminsPinnedTitle: 'Admin Team (Pinned)',
     userName: 'Name',
     userEmail: 'Email',
     userPhone: 'Phone',
@@ -2781,6 +2784,7 @@ function getAdminLabels() {
     emptyBookings: 'No requests yet',
     emptyPayments: 'No payments yet',
     emptyClients: 'No client contacts yet',
+    emptyAdmins: 'No admins found',
     emptyAudit: 'No actions yet',
     searchPlaceholder: 'Search: name, email, phone, role, product',
     bookingStatusFilter: 'Status filter',
@@ -3320,10 +3324,20 @@ function renderAdminOverview(data) {
     return Number.isFinite(ts) && ts >= minTimestamp;
   }
 
-  const usersSource = usersRaw.filter((user) => inSelectedPeriod(user && user.createdAt));
+  const adminsAll = usersRaw.filter((user) => normalizeAdminValue(user && user.role) === 'admin');
+  const usersSource = usersRaw.filter((user) => normalizeAdminValue(user && user.role) !== 'admin' && inSelectedPeriod(user && user.createdAt));
   const bookingsSource = bookingsRaw.filter((booking) => inSelectedPeriod(booking && booking.createdAt));
   const paymentsSource = paymentsRaw.filter((payment) => inSelectedPeriod(payment && payment.createdAt));
   const auditSource = auditRaw.filter((entry) => inSelectedPeriod(entry && entry.createdAt));
+
+  function getSortTimestamp(value) {
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : 0;
+  }
+
+  const admins = adminsAll
+    .slice()
+    .sort((a, b) => getSortTimestamp(b.lastLoginAt || b.createdAt) - getSortTimestamp(a.lastLoginAt || a.createdAt));
 
   const users = usersSource.filter((user) => matchesAdminSearch(searchQuery, [user.name, user.email, user.phone, user.role, user.authProvider]));
 
@@ -3381,7 +3395,7 @@ function renderAdminOverview(data) {
   const conversionLabel = bookings.length > 0
     ? `${((payments.length / bookings.length) * 100).toFixed(1)}%`
     : '0%';
-  const adminCount = users.filter((user) => normalizeAdminValue(user && user.role) === 'admin').length;
+  const adminCount = adminsAll.length;
 
   const periodOptions = [
     { value: 'all', label: labels.periodAll },
@@ -3389,7 +3403,9 @@ function renderAdminOverview(data) {
     { value: '30d', label: labels.period30d }
   ];
 
-  const usersTitleCount = periodFilter === 'all' ? Number(totals.users || usersRaw.length) : usersSource.length;
+  const usersTitleCount = periodFilter === 'all'
+    ? Math.max(0, Number(totals.users || usersRaw.length) - Number(adminCount))
+    : usersSource.length;
   const clientsTitleCount = clients.length;
   const bookingsTitleCount = periodFilter === 'all' ? Number(totals.bookings || bookingsRaw.length) : bookingsSource.length;
   const paymentsTitleCount = periodFilter === 'all' ? Number(totals.payments || paymentsRaw.length) : paymentsSource.length;
@@ -3432,6 +3448,21 @@ function renderAdminOverview(data) {
       <div class="admin-stat-card"><span class="admin-stat-label">${labels.metricConversion}</span><strong>${escapeHtml(conversionLabel)}</strong></div>
       <div class="admin-stat-card"><span class="admin-stat-label">${labels.metricAdmins}</span><strong>${Number(adminCount).toLocaleString()}</strong></div>
     </div>
+
+    <section class="admin-section admin-pinned-section">
+      <h3>${labels.adminsPinnedTitle} (${Number(adminCount).toLocaleString()})</h3>
+      <div class="admin-pinned-list">
+        ${admins.length
+          ? admins.map((admin) => `
+            <div class="admin-pinned-card">
+              <strong>${escapeHtml(admin.name || '-')}</strong>
+              <span>${escapeHtml(admin.email || '-')}</span>
+              <small>${escapeHtml(getAdminProviderLabel(admin.authProvider, labels))} · ${escapeHtml(admin.lastLoginAt ? formatAdminDate(admin.lastLoginAt) : '-')}</small>
+            </div>
+          `).join('')
+          : `<p class="admin-empty">${escapeHtml(labels.emptyAdmins)}</p>`}
+      </div>
+    </section>
 
     <section class="admin-section">
       <h3>${labels.usersTitle} (${Number(usersTitleCount).toLocaleString()})</h3>

@@ -1353,6 +1353,39 @@ body.dark-mode .phone-input-group .country-code-select {
   margin-bottom: 10px;
   font-size: 1rem;
 }
+.admin-pinned-section {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--white);
+  border: 1px solid #ececec;
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.admin-pinned-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.admin-pinned-card {
+  border: 1px solid #ececec;
+  background: #fafafa;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+}
+.admin-pinned-card strong {
+  font-size: 0.9rem;
+}
+.admin-pinned-card span {
+  font-size: 0.82rem;
+  color: var(--gray-700);
+}
+.admin-pinned-card small {
+  font-size: 0.76rem;
+  color: var(--gray-500);
+}
 .admin-table-wrap {
   border: 1px solid #ececec;
   border-radius: var(--radius);
