@@ -34,6 +34,9 @@ const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const EMAIL_FROM = (process.env.EMAIL_FROM || '').trim();
 const EMAIL_REPLY_TO = (process.env.EMAIL_REPLY_TO || '').trim();
+const CRM_WEBHOOK_URL = (process.env.CRM_WEBHOOK_URL || process.env.N8N_CONSULTATION_WEBHOOK_URL || '').trim();
+const CRM_WEBHOOK_TOKEN = (process.env.CRM_WEBHOOK_TOKEN || '').trim();
+const CRM_WEBHOOK_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.CRM_WEBHOOK_TIMEOUT_MS || '5000', 10) || 5000, 1000), 15000);
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
 const googleOAuthClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
@@ -76,6 +79,7 @@ const ALLOW_INSECURE_RESET_CODE_RESPONSE = String(process.env.ALLOW_INSECURE_RES
 const chatSessions = new Map();
 const rateLimitBuckets = new Map();
 const passwordResetChallenges = new Map();
+const adminSseClients = new Set();
 
 const KNOWLEDGE_BASE_PATH = path.join(__dirname, 'data', 'chat-knowledge-base.md');
 
@@ -1216,6 +1220,105 @@ async function sendLeadConfirmationEmail(booking) {
   });
 }
 
+
+function buildCrmLeadPayload(booking, source) {
+  const createdAt = booking && booking.createdAt ? new Date(booking.createdAt).toISOString() : new Date().toISOString();
+  return {
+    id: booking.id,
+    name: booking.name || '',
+    email: booking.email || '',
+    phone: booking.phone || '',
+    service: booking.service || 'consultation',
+    status: booking.status || 'pending',
+    message: booking.message || '',
+    source: source || 'website',
+    createdAt
+  };
+}
+
+async function sendLeadToCRM(booking, source) {
+  if (!CRM_WEBHOOK_URL) {
+    return { ok: false, skipped: true, reason: 'crm-webhook-not-configured' };
+  }
+
+  const payload = buildCrmLeadPayload(booking, source);
+  const headers = { 'Content-Type': 'application/json' };
+  if (CRM_WEBHOOK_TOKEN) {
+    headers.Authorization = `Bearer ${CRM_WEBHOOK_TOKEN}`;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), CRM_WEBHOOK_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(CRM_WEBHOOK_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`CRM webhook error ${response.status}: ${errorText}`);
+    }
+
+    return { ok: true };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function sendSseEvent(res, eventName, payload) {
+  if (!res) return;
+  res.write(`event: ${eventName}\n`);
+  res.write(`data: ${JSON.stringify(payload || {})}\n\n`);
+}
+
+function broadcastAdminEvent(eventName, payload) {
+  if (!adminSseClients.size) return;
+
+  for (const client of Array.from(adminSseClients)) {
+    try {
+      sendSseEvent(client.res, eventName, payload);
+    } catch (err) {
+      try {
+        client.res.end();
+      } catch (endErr) {
+        // ignore
+      }
+      adminSseClients.delete(client);
+    }
+  }
+}
+
+async function authenticateAdminStream(req, res, next) {
+  try {
+    const authHeader = String(req.headers.authorization || '').trim();
+    const queryToken = String(req.query.token || '').trim();
+
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.slice('Bearer '.length).trim()
+      : queryToken;
+
+    if (!token) {
+      return res.status(401).json({ error: 'Access denied' });
+    }
+
+    const user = jwt.verify(token, JWT_SECRET);
+    const roleFromDb = await resolveUserRoleFromDb(user);
+
+    if (normalizeUserRole(roleFromDb) !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    req.user = user;
+    return next();
+  } catch (err) {
+    return res.status(403).json({ error: 'Invalid token' });
+  }
+}
+
 async function sendTelegramText(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
     return { ok: false, skipped: true };
@@ -1246,6 +1349,13 @@ async function notifyLeadCreated(booking, source) {
   const report = {};
 
   try {
+    report.crm = await sendLeadToCRM(booking, source);
+  } catch (err) {
+    report.crm = { ok: false, skipped: false };
+    console.error('[lead-notify][crm] failed:', err && err.message ? err.message : err);
+  }
+
+  try {
     report.telegram = await sendTelegramText(text);
   } catch (err) {
     report.telegram = { ok: false, skipped: false };
@@ -1266,7 +1376,9 @@ async function notifyLeadCreated(booking, source) {
     console.error('[lead-notify][email-client] failed:', err && err.message ? err.message : err);
   }
 
-  const ok = [report.telegram, report.emailAdmin, report.emailClient].some((item) => item && item.ok);
+  broadcastAdminEvent('lead_created', buildCrmLeadPayload(booking, source));
+
+  const ok = [report.crm, report.telegram, report.emailAdmin, report.emailClient].some((item) => item && item.ok);
   return { ok, channels: report };
 }
 
@@ -2065,6 +2177,13 @@ app.patch('/api/admin/bookings/:id', authenticateAdmin, async (req, res) => {
       }
     });
 
+    broadcastAdminEvent('booking_updated', {
+      id: updatedBooking.id,
+      status: updatedBooking.status,
+      previousStatus: booking.status,
+      updatedAt: new Date().toISOString()
+    });
+
     res.json({
       message: 'Booking updated successfully',
       booking: updatedBooking
@@ -2143,6 +2262,49 @@ app.patch('/api/admin/users/:id/role', authenticateAdmin, authRateLimiter, async
   } catch (err) {
     return res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Admin real-time event stream (SSE)
+app.get('/api/admin/stream', authenticateAdminStream, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  const client = {
+    res,
+    userId: req.user && req.user.id ? Number(req.user.id) : null,
+    connectedAt: Date.now()
+  };
+
+  adminSseClients.add(client);
+  sendSseEvent(res, 'ready', { ts: Date.now() });
+
+  const heartbeat = setInterval(() => {
+    try {
+      sendSseEvent(res, 'ping', { ts: Date.now() });
+    } catch (err) {
+      clearInterval(heartbeat);
+      adminSseClients.delete(client);
+      try {
+        res.end();
+      } catch (endErr) {
+        // ignore
+      }
+    }
+  }, 25000);
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    adminSseClients.delete(client);
+  };
+
+  req.on('close', cleanup);
+  req.on('end', cleanup);
 });
 
 // Admin dashboard data
@@ -2887,6 +3049,12 @@ if (require.main === module) {
       console.log('Telegram lead notifications enabled');
     } else {
       console.log('Telegram lead notifications disabled (missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID)');
+    }
+
+    if (CRM_WEBHOOK_URL) {
+      console.log('CRM webhook lead delivery enabled');
+    } else {
+      console.log('CRM webhook lead delivery disabled (missing CRM_WEBHOOK_URL/N8N_CONSULTATION_WEBHOOK_URL)');
     }
 
     if (GOOGLE_CLIENT_ID) {

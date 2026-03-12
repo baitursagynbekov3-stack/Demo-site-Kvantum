@@ -44,6 +44,9 @@ const CHAT_SESSION_STORAGE_KEY = 'quantum_chat_session_id';
 const chatSessionIdCache = Object.create(null);
 let googleSignInInitialized = false;
 let googleSignInInitAttempts = 0;
+let adminStreamSource = null;
+let adminStreamReconnectTimer = null;
+let adminStreamRefreshTimer = null;
 
 function getChatIdentityKey() {
   if (currentUser && typeof currentUser === 'object') {
@@ -79,21 +82,6 @@ function getChatIdentityKey() {
 
 function getChatSessionStorageKey() {
   return CHAT_SESSION_STORAGE_KEY + '_' + getChatIdentityKey();
-}
-
-// Kompot.ai CRM webhook — fire-and-forget, never blocks UI
-function sendToKompotCRM(data) {
-  fetch('https://kompot.ai/api/ws/konton/workflows/webhook/6sl6qjjfac', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: data.name || '',
-      email: data.email || '',
-      phone: data.phone || '',
-      source: data.source || 'website',
-      service: data.service || ''
-    })
-  }).catch(() => {});
 }
 
 function buildApiUrl(path) {
@@ -1900,7 +1888,6 @@ async function handleRegister(e) {
       currentUser = result.user;
       localStorage.setItem('quantum_token', authToken);
       localStorage.setItem('quantum_user', JSON.stringify(currentUser));
-      sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'registration' });
       updateUIForLoggedIn();
       closeModal('loginModal');
       showToast('Account created! Welcome, ' + currentUser.name + '!', 'success');
@@ -2021,6 +2008,8 @@ async function handlePasswordReset(e) {
 }
 
 function handleLogout() {
+  stopAdminRealtimeStream(true);
+
   authToken = null;
   currentUser = null;
   localStorage.removeItem('quantum_token');
@@ -3705,6 +3694,93 @@ async function refreshAdminOverview() {
   }
 }
 
+function scheduleAdminOverviewRefresh(delayMs) {
+  const delay = Number.isFinite(delayMs) ? Math.max(100, delayMs) : 450;
+
+  if (adminStreamRefreshTimer) {
+    clearTimeout(adminStreamRefreshTimer);
+  }
+
+  adminStreamRefreshTimer = setTimeout(() => {
+    adminStreamRefreshTimer = null;
+
+    const modal = document.getElementById('adminModal');
+    if (!modal || !modal.classList.contains('active')) return;
+    refreshAdminOverview();
+  }, delay);
+}
+
+function stopAdminRealtimeStream(clearReconnectTimer) {
+  if (adminStreamSource) {
+    try {
+      adminStreamSource.close();
+    } catch (err) {
+      // ignore
+    }
+    adminStreamSource = null;
+  }
+
+  if (adminStreamRefreshTimer) {
+    clearTimeout(adminStreamRefreshTimer);
+    adminStreamRefreshTimer = null;
+  }
+
+  if (clearReconnectTimer !== false && adminStreamReconnectTimer) {
+    clearTimeout(adminStreamReconnectTimer);
+    adminStreamReconnectTimer = null;
+  }
+}
+
+function startAdminRealtimeStream() {
+  const modal = document.getElementById('adminModal');
+  if (!modal || !modal.classList.contains('active')) return;
+  if (!authToken || !currentUser || currentUser.role !== 'admin') return;
+
+  stopAdminRealtimeStream(false);
+
+  const streamBaseUrl = buildApiUrl('/api/admin/stream');
+  const separator = streamBaseUrl.includes('?') ? '&' : '?';
+  const streamUrl = `${streamBaseUrl}${separator}token=${encodeURIComponent(authToken)}`;
+  const source = new EventSource(streamUrl);
+  adminStreamSource = source;
+
+  source.addEventListener('lead_created', (event) => {
+    let payload = null;
+    try {
+      payload = JSON.parse(event.data || '{}');
+    } catch (err) {
+      payload = null;
+    }
+
+    const bookingId = payload && payload.id ? `#${payload.id}` : '';
+    const message = currentLang === 'ru'
+      ? `Новый лид ${bookingId}`.trim()
+      : `New lead ${bookingId}`.trim();
+
+    showToast(message, 'success');
+    scheduleAdminOverviewRefresh(300);
+  });
+
+  source.addEventListener('booking_updated', () => {
+    scheduleAdminOverviewRefresh(300);
+  });
+
+  source.onerror = () => {
+    if (adminStreamSource !== source) return;
+
+    stopAdminRealtimeStream(false);
+
+    if (adminStreamReconnectTimer) {
+      clearTimeout(adminStreamReconnectTimer);
+    }
+
+    adminStreamReconnectTimer = setTimeout(() => {
+      adminStreamReconnectTimer = null;
+      startAdminRealtimeStream();
+    }, 3000);
+  };
+}
+
 async function openAdminDashboard() {
   const dropdown = document.getElementById('userDropdown');
   if (dropdown) dropdown.style.display = 'none';
@@ -3728,6 +3804,7 @@ async function openAdminDashboard() {
   }
 
   openModal('adminModal');
+  startAdminRealtimeStream();
   await refreshAdminOverview();
 }
 
@@ -3738,7 +3815,13 @@ function openModal(id) {
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
+  const target = document.getElementById(id);
+  if (target) target.classList.remove('active');
+
+  if (id === 'adminModal') {
+    stopAdminRealtimeStream(true);
+  }
+
   document.body.style.overflow = '';
 }
 
@@ -3763,8 +3846,12 @@ function switchTab(tab) {
 
 document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('active');
-    document.body.style.overflow = '';
+    if (e.target.id) {
+      closeModal(e.target.id);
+    } else {
+      e.target.classList.remove('active');
+      document.body.style.overflow = '';
+    }
   }
 });
 
@@ -3796,7 +3883,6 @@ async function handleConsultation(e) {
     const result = await res.json();
 
     if (res.ok) {
-      sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'consultation', service: data.service });
       closeModal('consultModal');
       showSuccessModal(
         'Consultation Booked!',
@@ -3840,7 +3926,6 @@ async function handleContact(e) {
     const result = await res.json();
 
     if (res.ok) {
-      sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'contact', service: data.service });
       showSuccessModal(
         'Request Sent!',
         'Thank you, ' + data.name + '! We will contact you shortly via WhatsApp or Telegram.'
