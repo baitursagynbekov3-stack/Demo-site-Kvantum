@@ -1557,7 +1557,7 @@ app.post('/api/book-consultation', async (req, res) => {
 
     // Fire n8n consultation workflow
     if (process.env.N8N_CONSULTATION_WEBHOOK_URL) {
-      fetch(process.env.N8N_CONSULTATION_WEBHOOK_URL, {
+      await fetch(process.env.N8N_CONSULTATION_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
