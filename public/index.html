@@ -748,10 +748,10 @@
         </div>
         <div class="notification-select">
           <label data-i18n="payment.confirm_via">Send confirmation via:</label>
-          <div class="radio-group">
-            <label><input type="radio" name="notify" value="whatsapp" checked> WhatsApp</label>
-            <label><input type="radio" name="notify" value="telegram"> Telegram</label>
-            <label><input type="radio" name="notify" value="both" data-i18n="payment.both"> Both</label>
+          <div class="radio-group payment-notify-group">
+            <label class="radio-card"><input type="radio" name="notify" value="whatsapp" checked> <span>WhatsApp</span></label>
+            <label class="radio-card"><input type="radio" name="notify" value="telegram"> <span>Telegram</span></label>
+            <label class="radio-card"><input type="radio" name="notify" value="both"> <span data-i18n="payment.both">Both</span></label>
           </div>
         </div>
         <button type="submit" class="btn btn-primary btn-block btn-lg" id="payBtn" data-i18n="payment.pay">Pay Now</button>

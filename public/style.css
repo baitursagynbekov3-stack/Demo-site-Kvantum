@@ -1321,6 +1321,27 @@ body.dark-mode .phone-input-group .country-code-select {
 .notification-select { margin-bottom: 20px; }
 .notification-select > label { font-weight: 600; font-size: 0.85rem; }
 
+.payment-notify-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.payment-notify-group .radio-card {
+  flex: initial;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-height: 44px;
+}
+.payment-notify-group .radio-card input[type="radio"] {
+  display: none;
+}
+.payment-notify-group .radio-card span {
+  width: 100%;
+  text-align: center;
+}
+
 .admin-modal {
   max-width: 980px;
 }
@@ -1983,6 +2004,9 @@ body.dark-mode .profile-danger-zone {
     flex-direction: column;
     align-items: stretch;
     min-width: 220px;
+  }
+  .payment-notify-group {
+    grid-template-columns: 1fr;
   }
   .admin-status-select,
   .admin-note-input {

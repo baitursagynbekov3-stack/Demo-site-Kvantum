@@ -4017,15 +4017,25 @@ async function handlePayment(e) {
     if (res.ok) {
       closeModal('paymentModal');
 
-      await apiFetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: notifyMethod === 'both' ? 'whatsapp' : notifyMethod,
-          phone: '',
-          message: `Payment confirmed for ${currentPayment.productName}! Amount: ${currentPayment.amount} ${currentPayment.currency}. Order: ${result.payment.id}`
-        })
-      });
+      const notifyMessage = `Payment confirmed for ${currentPayment.productName}! Amount: ${currentPayment.amount} ${currentPayment.currency}. Order: ${result.payment.id}`;
+      const notifyChannels = notifyMethod === 'both' ? ['whatsapp', 'telegram'] : [notifyMethod];
+
+      for (const channel of notifyChannels) {
+        const notifyRes = await apiFetch('/api/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: channel,
+            phone: channel === 'whatsapp' ? '+996550412941' : '',
+            message: notifyMessage
+          })
+        });
+
+        const notifyResult = await notifyRes.json().catch(() => ({}));
+        if (channel === 'whatsapp' && notifyResult && notifyResult.url) {
+          window.open(notifyResult.url, '_blank', 'noopener');
+        }
+      }
 
       showSuccessModal(
         'Payment Successful!',
