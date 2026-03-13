@@ -2005,8 +2005,9 @@ function switchTab(tab) {
 }
 
 document.addEventListener('click', (e) => {
-  if (e.target.classList.contains('modal-overlay')) {
-    e.target.classList.remove('active');
+  const overlay = e.target.closest('.modal-overlay');
+  if (overlay && !e.target.closest('.modal')) {
+    overlay.classList.remove('active');
     document.body.style.overflow = '';
   }
 });
