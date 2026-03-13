@@ -1213,11 +1213,11 @@ async function notifyLeadCreated(booking, source) {
   }
 }
 
-function buildAuthToken(user, role) {
+function buildAuthToken(user, role, rememberMe = false) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name, role },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: rememberMe ? '60d' : '14d' }
   );
 }
 
@@ -1301,7 +1301,7 @@ app.post('/api/register', authRateLimiter, async (req, res) => {
 // Login
 app.post('/api/login', authRateLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
     const normalizedEmail = (email || '').trim().toLowerCase();
 
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -1326,7 +1326,7 @@ app.post('/api/login', authRateLimiter, async (req, res) => {
       });
     }
 
-    const token = buildAuthToken(user, role);
+    const token = buildAuthToken(user, role, !!rememberMe);
 
     res.json({
       message: 'Login successful',

@@ -633,6 +633,12 @@
           <label data-i18n="modal.password">Password</label>
           <input type="password" name="password" data-i18n-placeholder="modal.pass_ph" placeholder="Enter password" required>
         </div>
+        <div class="form-group remember-me-group">
+          <label class="remember-me-label">
+            <input type="checkbox" name="rememberMe">
+            <span data-i18n="modal.remember_me">Remember me for 2 months</span>
+          </label>
+        </div>
         <button type="submit" class="btn btn-primary btn-block" data-i18n="modal.login">Login</button>
         <p class="form-note"><a href="#" onclick="openResetModal(); return false;" data-i18n="modal.forgot">Forgot password?</a></p>
         <p class="form-note" data-i18n-html="modal.no_account">Don't have an account? <a href="#" onclick="switchTab('register')">Register here</a></p>
@@ -673,6 +679,12 @@
         <div class="form-group">
           <label data-i18n="modal.password">Password</label>
           <input type="password" name="password" data-i18n-placeholder="modal.create_pass_ph" placeholder="Create a password" required minlength="8">
+        </div>
+        <div class="form-group remember-me-group">
+          <label class="remember-me-label">
+            <input type="checkbox" name="rememberMe">
+            <span data-i18n="modal.remember_me">Remember me for 2 months</span>
+          </label>
         </div>
         <button type="submit" class="btn btn-primary btn-block" data-i18n="modal.register">Register</button>
         <p class="form-note" data-i18n-html="modal.has_account">Already have an account? <a href="#" onclick="switchTab('login')">Login here</a></p>

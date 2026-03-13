@@ -770,6 +770,7 @@ const translations = {
     'modal.pass_ph': 'Введите пароль',
     'modal.phone_ph': '+1 555 123 4567',
     'modal.forgot': 'Забыли пароль?',
+    'modal.remember_me': 'Запомнить меня на 2 месяца',
     'reset.title': 'Восстановление пароля',
     'reset.desc': 'Введите email и телефон из регистрации. Мы установим новый пароль.',
     'reset.email': 'Email',
@@ -1167,7 +1168,8 @@ async function handleLogin(e) {
   const form = e.target;
   const data = {
     email: form.email.value,
-    password: form.password.value
+    password: form.password.value,
+    rememberMe: form.rememberMe ? form.rememberMe.checked : false
   };
 
   try {

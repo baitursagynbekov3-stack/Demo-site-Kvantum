@@ -1342,6 +1342,9 @@ body.dark-mode .phone-input-group .country-code-select {
 }
 .form-note { text-align: center; font-size: 0.85rem; color: var(--gray-500); margin-top: 16px; }
 .form-note a { color: var(--primary); font-weight: 600; }
+.remember-me-group { margin-top: 4px; margin-bottom: 0; }
+.remember-me-label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; color: var(--gray-500); cursor: pointer; }
+.remember-me-label input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
 .modal-success { text-align: center; padding: 48px 40px; }
 .success-icon {
   width: 72px;
