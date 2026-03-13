@@ -48,7 +48,7 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || DEFAULT_ALLOWED_ORIGINS.
   .filter(Boolean);
 const ALLOWED_ORIGINS_SET = new Set(ALLOWED_ORIGINS);
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com')
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || 'baitursagynbekov3@gmail.com,konton840@gmail.com')
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
