@@ -2281,7 +2281,7 @@ function openWhatsApp() {
 }
 
 function openTelegram() {
-  window.open('https://t.me/Ai_Kvantum_bot', '_blank');
+  window.open('https://t.me/Altynaimashtab_bot', '_blank');
 }
 
 // ===== Helpers =====
