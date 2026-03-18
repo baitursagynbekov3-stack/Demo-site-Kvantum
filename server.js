@@ -2590,6 +2590,15 @@ app.post('/api/notify', authenticateToken, notifyRateLimiter, async (req, res) =
 });
 
 if (SERVE_STATIC) {
+  app.get('/privacy', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
+  });
+  app.get('/terms', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'terms.html'));
+  });
+  app.get('/refund', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'refund.html'));
+  });
   app.get('/admin', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'admin.html'));
   });
