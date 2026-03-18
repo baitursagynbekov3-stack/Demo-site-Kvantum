@@ -14,6 +14,8 @@ try {
 let leads = [];
 let chats = [];
 let payments = [];
+let allLeads = [];
+let allChats = [];
 let activeChat = null;
 
 let leadFilters = {
@@ -34,6 +36,47 @@ let paymentFilters = {
 let leadSearchTimer = null;
 let chatSearchTimer = null;
 let paymentSearchTimer = null;
+
+// ===== Dashboard load coordinator =====
+// Prevents stats from flickering when leads and chats load at different speeds.
+// Dashboard only re-renders once both are ready on the initial load.
+let dashboardReady = { leads: false, chats: false };
+function markDashboardReady(type) {
+  dashboardReady[type] = true;
+  if (dashboardReady.leads && dashboardReady.chats) renderDashboard();
+}
+function resetDashboardReady() {
+  dashboardReady.leads = false;
+  dashboardReady.chats = false;
+}
+
+// ===== Admin data cache =====
+// Persists loaded data in localStorage so the panel shows last known state
+// instantly on next open instead of starting blank.
+const ADMIN_CACHE_KEY = 'quantum_admin_cache';
+
+function saveAdminCache(key, data) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(ADMIN_CACHE_KEY) || '{}');
+    cache[key] = { data, savedAt: Date.now() };
+    localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) { /* storage full or unavailable */ }
+}
+
+function loadAdminCache(key) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(ADMIN_CACHE_KEY) || '{}');
+    const entry = cache[key];
+    return entry ? entry.data : null;
+  } catch (e) { return null; }
+}
+
+function getCacheSavedAt(key) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(ADMIN_CACHE_KEY) || '{}');
+    return cache[key] ? cache[key].savedAt : null;
+  } catch (e) { return null; }
+}
 
 const BOOKING_STATUSES = ['pending', 'new', 'in_progress', 'done', 'cancelled'];
 const CHAT_STATUSES = ['open', 'collecting', 'booked', 'closed', 'spam'];
@@ -331,6 +374,20 @@ function demoAdminApi(path, options) {
     return createApiResponse(200, { message: 'Chat status updated', chat: sessions[idx] });
   }
 
+  if (path === '/api/admin/users' && method === 'GET') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+    const users = getStorageArray('quantum_demo_users').map(u => ({
+      id: u.id || 0,
+      name: u.name || '',
+      email: u.email || '',
+      phone: u.phone || '',
+      role: u.role || 'user',
+      createdAt: u.createdAt || null
+    }));
+    return createApiResponse(200, { users });
+  }
+
   if (path === '/api/admin/chatbot-knowledge' && method === 'GET') {
     const role = getDemoUserRole();
     if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
@@ -397,9 +454,13 @@ function switchSection(section, e) {
 // ===== Modals =====
 function openAdminModal(id) {
   document.getElementById(id).classList.add('active');
+  document.body.classList.add('modal-open');
 }
 function closeAdminModal(id) {
   document.getElementById(id).classList.remove('active');
+  if (!document.querySelector('.admin-modal-overlay.active')) {
+    document.body.classList.remove('modal-open');
+  }
 }
 
 // ===== Escape HTML =====
@@ -775,39 +836,63 @@ async function deleteService(id) {
 // LEADS
 // ================================================================
 async function loadLeads(force) {
-  try {
-    const endpoint = withQuery('/api/admin/leads', {
-      limit: 300,
-      status: leadFilters.status,
-      search: leadFilters.search
-    });
+  // Show cached data immediately so the panel never looks blank
+  if (!force) {
+    const cached = loadAdminCache('leads');
+    if (cached) {
+      allLeads = cached;
+      applyLeadFilters(true);
+    }
+  }
 
-    const res = await adminFetch(endpoint, { headers: authHeaders() });
+  try {
+    const res = await adminFetch(withQuery('/api/admin/leads', { limit: 300 }), { headers: authHeaders() });
     const data = await res.json();
 
     if (!res.ok) {
       showToast(data.error || 'Failed to load leads', 'error');
+      markDashboardReady('leads');
       return;
     }
 
     leads = Array.isArray(data.leads) ? data.leads : [];
     renderLeads();
+    allLeads = Array.isArray(data.leads) ? data.leads : [];
+    saveAdminCache('leads', allLeads);
+    applyLeadFilters(true);
 
     if (force) showToast('Leads refreshed', 'info');
   } catch (e) {
     showToast('Failed to load leads', 'error');
+    markDashboardReady('leads');
   }
 }
 
 function onLeadFiltersChanged() {
   const searchInput = document.getElementById('leadSearchInput');
   const statusSelect = document.getElementById('leadStatusFilter');
-
-  leadFilters.search = searchInput ? searchInput.value.trim() : '';
+  leadFilters.search = searchInput ? searchInput.value.trim().toLowerCase() : '';
   leadFilters.status = statusSelect ? statusSelect.value : 'all';
+  applyLeadFilters();
+}
 
-  clearTimeout(leadSearchTimer);
-  leadSearchTimer = setTimeout(() => loadLeads(false), 250);
+function applyLeadFilters(fromLoad) {
+  leads = allLeads.filter(lead => {
+    const statusOk = leadFilters.status === 'all' || String(lead.status || '').toLowerCase() === leadFilters.status;
+    if (!statusOk) return false;
+    if (!leadFilters.search) return true;
+    const haystack = [lead.name, lead.email, lead.phone, lead.service, lead.message]
+      .map(v => String(v || '').toLowerCase()).join(' ');
+    return haystack.includes(leadFilters.search);
+  });
+  renderLeads();
+  // fromLoad = called during initial data load; use coordinator so dashboard
+  // only renders once both leads AND chats are ready.
+  if (fromLoad) {
+    markDashboardReady('leads');
+  } else {
+    renderDashboard();
+  }
 }
 
 function renderLeads() {
@@ -857,8 +942,8 @@ async function updateLeadStatus(leadId, status) {
       return;
     }
 
-    leads = leads.map((item) => (Number(item.id) === Number(leadId) ? { ...item, status: data.booking.status } : item));
-    renderLeads();
+    allLeads = allLeads.map((item) => (Number(item.id) === Number(leadId) ? { ...item, status: data.booking.status } : item));
+    applyLeadFilters();
     showToast('Lead status updated', 'success');
   } catch (e) {
     showToast('Failed to update lead status', 'error');
@@ -869,46 +954,69 @@ async function updateLeadStatus(leadId, status) {
 // CHATS
 // ================================================================
 async function loadChats(force) {
-  try {
-    const endpoint = withQuery('/api/admin/chats', {
-      limit: 200,
-      status: chatFilters.status,
-      search: chatFilters.search
-    });
+  // Show cached data immediately
+  if (!force) {
+    const cached = loadAdminCache('chats');
+    if (cached) {
+      allChats = cached;
+      applyChatFilters(true);
+    }
+  }
 
-    const res = await adminFetch(endpoint, { headers: authHeaders() });
+  try {
+    const res = await adminFetch(withQuery('/api/admin/chats', { limit: 200 }), { headers: authHeaders() });
     const data = await res.json();
 
     if (!res.ok) {
       showToast(data.error || 'Failed to load chats', 'error');
+      markDashboardReady('chats');
       return;
     }
 
     chats = Array.isArray(data.chats) ? data.chats : [];
     renderChats();
+    allChats = Array.isArray(data.chats) ? data.chats : [];
+    saveAdminCache('chats', allChats);
 
     if (activeChat && activeChat.id) {
-      const refreshed = chats.find((item) => Number(item.id) === Number(activeChat.id));
-      if (refreshed) {
-        activeChat = refreshed;
-      }
+      const refreshed = allChats.find((item) => Number(item.id) === Number(activeChat.id));
+      if (refreshed) activeChat = refreshed;
     }
+
+    applyChatFilters(true);
 
     if (force) showToast('Chats refreshed', 'info');
   } catch (e) {
     showToast('Failed to load chats', 'error');
+    markDashboardReady('chats');
   }
 }
 
 function onChatFiltersChanged() {
   const searchInput = document.getElementById('chatSearchInput');
   const statusSelect = document.getElementById('chatStatusFilter');
-
-  chatFilters.search = searchInput ? searchInput.value.trim() : '';
+  chatFilters.search = searchInput ? searchInput.value.trim().toLowerCase() : '';
   chatFilters.status = statusSelect ? statusSelect.value : 'all';
+  applyChatFilters();
+}
 
-  clearTimeout(chatSearchTimer);
-  chatSearchTimer = setTimeout(() => loadChats(false), 250);
+function applyChatFilters(fromLoad) {
+  chats = allChats.filter(chat => {
+    const statusOk = chatFilters.status === 'all' || String(chat.leadStatus || '').toLowerCase() === chatFilters.status;
+    if (!statusOk) return false;
+    if (!chatFilters.search) return true;
+    const lead = chat.lead || {};
+    const lastMsg = chat.lastMessage && chat.lastMessage.content ? chat.lastMessage.content : '';
+    const haystack = [chat.sessionId, lead.name, lead.email, lead.phone, lead.service, lead.message, lastMsg]
+      .map(v => String(v || '').toLowerCase()).join(' ');
+    return haystack.includes(chatFilters.search);
+  });
+  renderChats();
+  if (fromLoad) {
+    markDashboardReady('chats');
+  } else {
+    renderDashboard();
+  }
 }
 
 function renderChats() {
@@ -968,12 +1076,12 @@ async function updateChatStatus(chatId, status, silent) {
       return false;
     }
 
-    chats = chats.map((item) => (Number(item.id) === Number(chatId) ? { ...item, leadStatus: status } : item));
+    allChats = allChats.map((item) => (Number(item.id) === Number(chatId) ? { ...item, leadStatus: status } : item));
     if (activeChat && Number(activeChat.id) === Number(chatId)) {
       activeChat = { ...activeChat, leadStatus: status };
     }
 
-    renderChats();
+    applyChatFilters();
     if (!silent) showToast('Chat status updated', 'success');
     return true;
   } catch (e) {
@@ -1249,6 +1357,138 @@ async function saveChatbotKnowledge() {
 }
 
 // ================================================================
+// DASHBOARD
+// ================================================================
+function renderDashboard() {
+  // Always use the full unfiltered arrays for stats so filters don't affect counts
+  const totalLeads = allLeads.length;
+  const pendingLeads = allLeads.filter(l => ['pending', 'new', 'in_progress'].includes(l.status)).length;
+  const doneLeads = allLeads.filter(l => l.status === 'done').length;
+  const activeChatsCount = allChats.filter(c => ['open', 'collecting'].includes(c.leadStatus)).length;
+
+  function setKpi(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  setKpi('kpiTotalLeads', totalLeads);
+  setKpi('kpiPendingLeads', pendingLeads);
+  setKpi('kpiDoneLeads', doneLeads);
+  setKpi('kpiActiveChats', activeChatsCount);
+
+  // Show when data was last refreshed from server
+  const savedAt = getCacheSavedAt('leads');
+  const lastUpdatedEl = document.getElementById('dashLastUpdated');
+  if (lastUpdatedEl) {
+    lastUpdatedEl.textContent = savedAt ? 'Last updated: ' + new Date(savedAt).toLocaleTimeString() : '';
+  }
+
+  // Recent leads preview (last 5)
+  const root = document.getElementById('dashRecentLeads');
+  if (!root) return;
+
+  const recent = leads.slice(0, 5);
+  if (!recent.length) {
+    root.innerHTML = '<div class="empty-state"><p>No leads yet — they will appear here once you start getting inquiries.</p></div>';
+    return;
+  }
+
+  root.innerHTML = recent.map((lead) => {
+    const contactParts = [lead.email, lead.phone].filter(Boolean).map(esc).join(' · ');
+    return `
+      <div class="admin-list-item">
+        <div class="admin-list-head">
+          <div>
+            <div class="lead-name">${esc(lead.name || '-')}</div>
+            <div class="lead-contact">${contactParts || '—'}</div>
+          </div>
+          ${statusPill(lead.status)}
+        </div>
+        ${lead.service ? `<span class="lead-service-badge">${esc(lead.service)}</span>` : ''}
+        <div class="lead-date">Created: ${esc(formatDateTime(lead.createdAt))}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+function refreshDashboard() {
+  resetDashboardReady();
+  loadLeads(true);
+  loadChats(true);
+}
+
+// ================================================================
+// USERS
+// ================================================================
+let allUsers = [];
+let userSearchTimer = null;
+
+async function loadUsers(force) {
+  // Show cached users immediately
+  if (!force) {
+    const cached = loadAdminCache('users');
+    if (cached) {
+      allUsers = cached;
+      renderUsers();
+    } else {
+      const tbody = document.getElementById('usersTableBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="admin-loading">Loading...</td></tr>';
+    }
+  }
+
+  try {
+    const res = await adminFetch('/api/admin/users', { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load users', 'error');
+      return;
+    }
+
+    allUsers = Array.isArray(data.users) ? data.users : [];
+    saveAdminCache('users', allUsers);
+    renderUsers();
+    if (force) showToast('Users refreshed', 'info');
+  } catch (e) {
+    showToast('Failed to load users', 'error');
+  }
+}
+
+function onUserSearchChanged() {
+  clearTimeout(userSearchTimer);
+  userSearchTimer = setTimeout(renderUsers, 150);
+}
+
+function renderUsers() {
+  const tbody = document.getElementById('usersTableBody');
+  if (!tbody) return;
+
+  const searchInput = document.getElementById('userSearchInput');
+  const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+  const filtered = allUsers.filter(u => {
+    if (!q) return true;
+    return [u.name, u.email, u.phone].map(v => String(v || '').toLowerCase()).join(' ').includes(q);
+  });
+
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:24px;color:#666;text-align:center;">No users found.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((u, i) => `
+    <tr>
+      <td style="color:#555">${u.id}</td>
+      <td style="color:#fff">${esc(u.name || '-')}</td>
+      <td>${esc(u.email || '-')}</td>
+      <td>${esc(u.phone || '-')}</td>
+      <td><span class="role-badge ${esc(u.role || 'user')}">${esc(u.role || 'user')}</span></td>
+      <td>${esc(formatDateTime(u.createdAt))}</td>
+    </tr>
+  `).join('');
+}
+
+// ================================================================
 // INIT
 // ================================================================
 async function initAdmin() {
@@ -1285,7 +1525,8 @@ async function initAdmin() {
   if (chatStatusSelect) chatStatusSelect.value = chatFilters.status;
   if (paymentStatusSelect) paymentStatusSelect.value = paymentFilters.status;
 
-  // Load all data
+  // Load all data — coordinator ensures dashboard renders once both leads+chats are ready
+  resetDashboardReady();
   loadTestimonials();
   loadPrograms();
   loadServices();
@@ -1293,6 +1534,7 @@ async function initAdmin() {
   loadChats(false);
   loadPayments(false);
   loadChatbotKnowledge(false);
+  loadUsers(false);
 }
 
 document.addEventListener('DOMContentLoaded', initAdmin);
