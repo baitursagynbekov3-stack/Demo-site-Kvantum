@@ -246,11 +246,14 @@ input:focus, select:focus, textarea:focus {
   .btn,
   .modal-overlay,
   .modal,
-  .nav-links {
+  .nav-links,
+  .mobile-sticky-cta {
     transition: none !important;
   }
   .btn:hover,
-  .btn:active {
+  .btn:active,
+  .mobile-sticky-cta,
+  .mobile-sticky-cta.is-visible {
     transform: none;
   }
 }
@@ -1689,6 +1692,48 @@ body.dark-mode .phone-input-group .country-code-select {
   white-space: nowrap;
 }
 
+/* ===== Mobile Sticky CTA ===== */
+.mobile-sticky-cta {
+  display: none;
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  min-height: 52px;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: var(--primary);
+  color: #ffffff;
+  border: 1px solid var(--primary);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-align: center;
+  z-index: 1400;
+  box-shadow: 0 14px 28px rgba(196,30,30,0.3);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate3d(0, 120%, 0);
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard),
+    visibility 0s linear var(--motion-duration-fast);
+}
+.mobile-sticky-cta.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity var(--motion-duration-fast) var(--motion-ease-standard),
+    transform var(--motion-duration-fast) var(--motion-ease-standard);
+}
+.mobile-sticky-cta:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
 /* ===== Chatbot ===== */
 .chatbot-widget {
   position: fixed;
@@ -2092,7 +2137,9 @@ body.dark-mode .phone-input-group .country-code-select {
   .hero-buttons { flex-direction: column; align-items: center; }
   .hero-buttons .btn { width: min(100%, 340px); }
   .scroll-indicator { display: none; }
+  .mobile-sticky-cta { display: block; }
   .chatbot-widget { right: 16px; bottom: 16px; }
+  body.has-mobile-sticky-cta .chatbot-widget { bottom: 92px; }
 }
 
 @media (max-width: 640px) {
@@ -2140,6 +2187,7 @@ body.dark-mode .phone-input-group .country-code-select {
   .footer { padding: 64px 0 32px; }
   .toast { left: 12px; right: 12px; max-width: none; }
   .chatbot-widget { right: 12px; bottom: 12px; }
+  body.has-mobile-sticky-cta .chatbot-widget { bottom: 86px; }
   .chatbot-toggle { width: 52px; height: 52px; }
   .chatbot-window { width: calc(100vw - 16px); right: -4px; max-height: 68vh; }
 }

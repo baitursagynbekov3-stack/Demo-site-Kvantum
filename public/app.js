@@ -896,6 +896,7 @@ const translations = {
     'consult.opt1': 'Общая консультация',
     'consult.preferred': 'Предпочтительный способ связи',
     'consult.submit': 'Записаться на консультацию',
+    'sticky.consult': 'Записаться на диагностику подсознания',
     'payment.title': 'Завершить оплату',
     'payment.card': 'Номер карты',
     'payment.expiry': 'Срок',
@@ -1136,6 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initScrollAnimations();
   initCounterAnimations();
   initMediaLazyLoading();
+  initMobileStickyCta();
   checkAuth();
   enforceLanguagePolicy();
   loadSiteContent();
@@ -1321,6 +1323,45 @@ function initMediaLazyLoading() {
   });
 
   lazyVideos.forEach((videoEl) => observer.observe(videoEl));
+}
+
+function initMobileStickyCta() {
+  const cta = document.getElementById('mobileStickyCta');
+  if (!cta) return;
+
+  const mq = window.matchMedia('(max-width: 768px)');
+  let ticking = false;
+
+  const updateState = () => {
+    const shouldShow = mq.matches
+      && window.scrollY > 380
+      && !hasOpenModalOverlay()
+      && !isVideoReviewOpen();
+
+    cta.classList.toggle('is-visible', shouldShow);
+    document.body.classList.toggle('has-mobile-sticky-cta', shouldShow);
+  };
+
+  const requestUpdate = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      updateState();
+    });
+  };
+
+  if (typeof mq.addEventListener === 'function') {
+    mq.addEventListener('change', requestUpdate);
+  } else if (typeof mq.addListener === 'function') {
+    mq.addListener(requestUpdate);
+  }
+
+  window.addEventListener('scroll', requestUpdate, { passive: true });
+  window.addEventListener('resize', requestUpdate);
+
+  window.syncMobileStickyCta = updateState;
+  updateState();
 }
 
 function animateCounter(el, target) {
@@ -2297,6 +2338,7 @@ function openModal(id) {
   overlay.classList.remove('is-closing');
   overlay.classList.add('active');
   syncBodyScrollLock();
+  if (typeof window.syncMobileStickyCta === 'function') window.syncMobileStickyCta();
 
   if (id === 'consultModal' && currentUser) {
     const form = document.getElementById('consultForm');
@@ -2331,12 +2373,14 @@ function closeModal(id) {
   const overlay = document.getElementById(id);
   if (!overlay || !overlay.classList.contains('active')) {
     syncBodyScrollLock();
+    if (typeof window.syncMobileStickyCta === 'function') window.syncMobileStickyCta();
     return;
   }
 
   if (prefersReducedMotion()) {
     overlay.classList.remove('active', 'is-closing');
     syncBodyScrollLock();
+    if (typeof window.syncMobileStickyCta === 'function') window.syncMobileStickyCta();
     return;
   }
 
@@ -2346,6 +2390,7 @@ function closeModal(id) {
     overlay.classList.remove('active', 'is-closing');
     overlay.dataset.closeTimer = '';
     syncBodyScrollLock();
+    if (typeof window.syncMobileStickyCta === 'function') window.syncMobileStickyCta();
   }, MODAL_CLOSE_DURATION_MS);
 
   overlay.dataset.closeTimer = String(timerId);
