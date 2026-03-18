@@ -2982,6 +2982,7 @@ async function handleConsultation(e) {
     phone: phone,
     service: form.service.value,
     message: '',
+    contact_method: form.contact_method && form.contact_method.value ? form.contact_method.value : 'whatsapp',
     captchaToken: getFormCaptchaToken(form),
     ...attribution
   };

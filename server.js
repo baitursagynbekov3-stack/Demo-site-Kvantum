@@ -36,6 +36,9 @@ const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const RESEND_FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || 'noreply@kvantum.us').trim();
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
+const GOOGLE_SHEETS_WEBHOOK_URL = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || '').trim();
+const GOOGLE_SHEETS_WEBHOOK_SECRET = (process.env.GOOGLE_SHEETS_WEBHOOK_SECRET || '').trim();
+const GOOGLE_SHEETS_WEBHOOK_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.GOOGLE_SHEETS_WEBHOOK_TIMEOUT_MS || '8000', 10) || 8000, 1000), 20000);
 const BOOKING_CAPTCHA_SECRET = (process.env.BOOKING_CAPTCHA_SECRET || process.env.TURNSTILE_SECRET_KEY || '').trim();
 const BOOKING_CAPTCHA_REQUIRED = String(process.env.BOOKING_CAPTCHA_REQUIRED || '').trim() === 'true';
 const BOOKING_CAPTCHA_VERIFY_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.BOOKING_CAPTCHA_VERIFY_TIMEOUT_MS || '5000', 10) || 5000, 1000), 15000);
@@ -1319,6 +1322,91 @@ async function notifyLeadCreated(booking, source) {
   }
 }
 
+function pickLeadAttribution(raw) {
+  const input = raw && typeof raw === 'object' ? raw : {};
+  const fields = [
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_term',
+    'utm_content',
+    'gclid',
+    'fbclid',
+    'ttclid',
+    'referrer',
+    'landing_page'
+  ];
+
+  const attribution = {};
+  fields.forEach((field) => {
+    const value = String(input[field] || '').trim();
+    if (value) attribution[field] = value;
+  });
+
+  return attribution;
+}
+
+function normalizeContactMethod(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['whatsapp', 'telegram', 'both'].includes(normalized) ? normalized : '';
+}
+
+function buildGoogleSheetsLeadPayload(booking, source, extras) {
+  const details = extras && typeof extras === 'object' ? extras : {};
+  const createdAt = booking && booking.createdAt ? new Date(booking.createdAt).toISOString() : new Date().toISOString();
+
+  const payload = {
+    name: String(booking && booking.name ? booking.name : '').trim(),
+    email: String(booking && booking.email ? booking.email : '').trim().toLowerCase(),
+    phone: String(booking && booking.phone ? booking.phone : '').trim(),
+    bookingId: booking && booking.id ? String(booking.id) : '',
+    service: String(booking && booking.service ? booking.service : '').trim(),
+    status: String(booking && booking.status ? booking.status : 'pending').trim(),
+    source: String(source || 'website-form').trim(),
+    contactMethod: String(details.contactMethod || '').trim(),
+    message: String(booking && booking.message ? booking.message : '').trim(),
+    createdAt,
+    ...details.attribution
+  };
+
+  return payload;
+}
+
+async function sendLeadToGoogleSheets(booking, source, extras) {
+  if (!booking) return { ok: false, skipped: true };
+  if (!GOOGLE_SHEETS_WEBHOOK_URL) return { ok: false, skipped: true };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (GOOGLE_SHEETS_WEBHOOK_SECRET) {
+    headers['x-webhook-secret'] = GOOGLE_SHEETS_WEBHOOK_SECRET;
+  }
+
+  const payload = buildGoogleSheetsLeadPayload(booking, source, extras);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GOOGLE_SHEETS_WEBHOOK_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(GOOGLE_SHEETS_WEBHOOK_URL, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Google Sheets webhook ${response.status}: ${errorText.slice(0, 300)}`);
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error('[google-sheets webhook] failed:', err && err.message ? err.message : err);
+    return { ok: false, skipped: false };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 function buildAuthToken(user, role, rememberMe = false) {
   return jwt.sign(
     { id: user.id, email: user.email, name: user.name, role },
@@ -1652,6 +1740,8 @@ app.post('/api/book-consultation', bookingRateLimiter, async (req, res) => {
     const normalizedName = String(name || '').trim();
     const normalizedEmail = (email || '').trim().toLowerCase();
     const normalizedPhone = normalizePhone(phone);
+    const contactMethod = normalizeContactMethod(req.body && (req.body.contact_method || req.body.contactMethod));
+    const attribution = pickLeadAttribution(req.body);
 
     const captchaResult = await verifyBookingCaptcha(captchaToken, req);
     if (!captchaResult.ok) {
@@ -1671,7 +1761,7 @@ app.post('/api/book-consultation', bookingRateLimiter, async (req, res) => {
 
     const booking = await prisma.booking.create({
       data: {
-        name,
+        name: normalizedName,
         email: normalizedEmail,
         phone: normalizedPhone,
         service: service || 'consultation',
@@ -1681,6 +1771,7 @@ app.post('/api/book-consultation', bookingRateLimiter, async (req, res) => {
     });
 
     await notifyLeadCreated(booking, 'website-form');
+    await sendLeadToGoogleSheets(booking, 'website-form', { contactMethod, attribution });
 
     // Fire n8n consultation workflow
     if (process.env.N8N_CONSULTATION_WEBHOOK_URL) {
@@ -1693,8 +1784,11 @@ app.post('/api/book-consultation', bookingRateLimiter, async (req, res) => {
           email: booking.email,
           phone: booking.phone,
           service: booking.service,
+          message: booking.message,
+          contactMethod,
           source: 'website-form',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          ...attribution
         })
       }).catch(err => console.error('[n8n consultation webhook] failed:', err.message));
     }
@@ -2490,6 +2584,10 @@ app.post('/api/chat', chatRateLimiter, async (req, res) => {
         });
 
         await notifyLeadCreated(booking, 'chatbot');
+        await sendLeadToGoogleSheets(booking, 'chatbot', {
+          contactMethod: 'chatbot',
+          attribution: {}
+        });
 
         if (session) {
           session.leadDraft = createEmptyLeadDraft();
