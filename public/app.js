@@ -2222,6 +2222,48 @@ async function openAdminDashboard() {
   await refreshAdminOverview();
 }
 
+// ===== Credential Modals =====
+const credModalContent = {
+  1: {
+    en: {
+      title: 'Subconscious & Quantum Field Specialist',
+      body: 'Altynai works at the deepest level of human psychology — where the subconscious mind and the quantum energy field intersect. Her approach goes beyond surface-level coaching by targeting the root cause of what holds people back: the invisible programs running silently beneath conscious awareness. Through her signature "Brain Charge" method, she guides clients to reprogram their thoughts, feelings, and internal states — because when those shift, everything in life follows. Relationships improve, finances open up, and life direction becomes clear. She works through the subconscious, the energetic field, and the state of a leader — and stays with clients until real results appear.'
+    },
+    ru: {
+      title: 'Специалист по подсознанию и квантовому полю',
+      body: 'Алтынай работает на самом глубоком уровне человеческой психологии — там, где подсознание и квантовое энергетическое поле пересекаются. Её подход выходит за рамки поверхностного коучинга: она работает с первопричиной того, что мешает людям двигаться вперёд — с невидимыми программами, которые тихо работают ниже уровня сознания. С помощью авторского метода «Brain Charge» она помогает клиентам перепрограммировать мысли, чувства и внутренние состояния — потому что когда они меняются, меняется всё. Улучшаются отношения, открываются финансы, появляется ясность в направлении жизни. Она работает через подсознание, энергетическое поле и состояние лидера — и сопровождает клиентов до появления реальных результатов.'
+    }
+  },
+  2: {
+    en: {
+      title: 'NLP Master',
+      body: 'As a certified Master of NLP, Altynai brings over 30 NLP practices into her work with entrepreneurs and her mentorship program. She uses the tools of Neuro-Linguistic Programming not as theory but as live, hands-on techniques — applied directly in sessions to break limiting patterns, rewire language-based beliefs, and create fast, measurable shifts in how clients think and behave. Her NLP mastery forms the backbone of her deep analysis sessions and is passed on to students in her mentorship track, where she trains others to read emotional fields, clear subconscious blocks, and facilitate transformation professionally.'
+    },
+    ru: {
+      title: 'Мастер НЛП',
+      body: 'Как сертифицированный Мастер НЛП, Алтынай привносит более 30 практик нейролингвистического программирования в работу с предпринимателями и в свою программу наставничества. Она использует инструменты НЛП не как теорию, а как живые, практические техники — применяемые непосредственно в сессиях для разрушения ограничивающих паттернов, перепрограммирования убеждений на уровне языка и создания быстрых, измеримых изменений в мышлении и поведении клиентов. Мастерство НЛП лежит в основе её глубинных разборов и передаётся студентам в программе наставничества, где она обучает других читать эмоциональные поля, очищать подсознательные блоки и профессионально сопровождать трансформацию.'
+    }
+  },
+  3: {
+    en: {
+      title: 'Master of Deep Analysis Sessions',
+      body: "Altynai's deep analysis sessions are her most powerful one-on-one format — not standard coaching conversations, but precise, structured dives into the root causes behind a person's stuck patterns. Drawing on her expertise in the subconscious, quantum field work, and NLP, she rapidly identifies where a client's inner blocks originate — whether in childhood programming, family system dynamics, or inherited generational scenarios. Her intensives work directly with separation from parental patterns, release of foreign life scripts, restoration of healthy hierarchy, and removal of childhood blocks. Clients don't just gain insight — they leave with a fundamentally different internal state and a clear path forward. She works only with entrepreneurs, and only after a free consultation to ensure the right fit."
+    },
+    ru: {
+      title: 'Мастер глубинных разборов',
+      body: 'Глубинные разборы Алтынай — её самый мощный формат индивидуальной работы. Это не стандартные коучинговые беседы, а точные, структурированные погружения в первопричины застревания человека. Опираясь на экспертизу в области подсознания, работы с квантовым полем и НЛП, она быстро определяет, откуда берутся внутренние блоки клиента — будь то детское программирование, динамика семейной системы или унаследованные родовые сценарии. Её интенсивы работают напрямую с отделением от родительских паттернов, освобождением от чужих жизненных сценариев, восстановлением здоровой иерархии и снятием детских блоков. Клиенты уходят не просто с осознанием — они выходят с принципиально другим внутренним состоянием и чётким путём вперёд. Она работает только с предпринимателями и только после бесплатной консультации, чтобы убедиться в правильном подборе.'
+    }
+  }
+};
+
+function openCredModal(n) {
+  const lang = currentLang === 'en' ? 'en' : 'ru';
+  const content = credModalContent[n][lang];
+  document.getElementById('credModalTitle' + n).textContent = content.title;
+  document.getElementById('credModalBody' + n).textContent = content.body;
+  openModal('credModal' + n);
+}
+
 // ===== Modals =====
 const MODAL_CLOSE_DURATION_MS = 320;
 
