@@ -36,7 +36,8 @@ const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const RESEND_FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || 'noreply@kvantum.us').trim();
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
-const GOOGLE_SHEETS_WEBHOOK_URL = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || '').trim();
+const N8N_CONSULTATION_WEBHOOK_URL = (process.env.N8N_CONSULTATION_WEBHOOK_URL || '').trim();
+const GOOGLE_SHEETS_WEBHOOK_URL = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || N8N_CONSULTATION_WEBHOOK_URL).trim();
 const GOOGLE_SHEETS_WEBHOOK_SECRET = (process.env.GOOGLE_SHEETS_WEBHOOK_SECRET || '').trim();
 const GOOGLE_SHEETS_WEBHOOK_TIMEOUT_MS = Math.min(Math.max(parseInt(process.env.GOOGLE_SHEETS_WEBHOOK_TIMEOUT_MS || '8000', 10) || 8000, 1000), 20000);
 const BOOKING_CAPTCHA_SECRET = (process.env.BOOKING_CAPTCHA_SECRET || process.env.TURNSTILE_SECRET_KEY || '').trim();
@@ -1773,9 +1774,9 @@ app.post('/api/book-consultation', bookingRateLimiter, async (req, res) => {
     await notifyLeadCreated(booking, 'website-form');
     await sendLeadToGoogleSheets(booking, 'website-form', { contactMethod, attribution });
 
-    // Fire n8n consultation workflow
-    if (process.env.N8N_CONSULTATION_WEBHOOK_URL) {
-      await fetch(process.env.N8N_CONSULTATION_WEBHOOK_URL, {
+    // Fire n8n consultation workflow (skip if Google Sheets webhook falls back to the same URL)
+    if (N8N_CONSULTATION_WEBHOOK_URL && N8N_CONSULTATION_WEBHOOK_URL !== GOOGLE_SHEETS_WEBHOOK_URL) {
+      await fetch(N8N_CONSULTATION_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2584,10 +2585,6 @@ app.post('/api/chat', chatRateLimiter, async (req, res) => {
         });
 
         await notifyLeadCreated(booking, 'chatbot');
-        await sendLeadToGoogleSheets(booking, 'chatbot', {
-          contactMethod: 'chatbot',
-          attribution: {}
-        });
 
         if (session) {
           session.leadDraft = createEmptyLeadDraft();
