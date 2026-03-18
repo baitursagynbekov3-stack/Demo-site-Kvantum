@@ -15,10 +15,12 @@ const API_BASE_URL = (window.QUANTUM_API_BASE_URL || '').trim().replace(/\/$/, '
 const USE_DEMO_API = window.QUANTUM_USE_DEMO_API === true || (!API_BASE_URL && window.location.hostname.endsWith('github.io'));
 const GOOGLE_CLIENT_ID = (window.QUANTUM_GOOGLE_CLIENT_ID || '').trim();
 const TURNSTILE_SITE_KEY = (window.QUANTUM_TURNSTILE_SITE_KEY || '').trim();
+const GA4_MEASUREMENT_ID = (window.QUANTUM_GA4_MEASUREMENT_ID || '').trim();
 const CHAT_SESSION_STORAGE_KEY = 'quantum_chat_session_id';
 const turnstileWidgetByForm = new WeakMap();
 let turnstileScriptPromise = null;
 const chatSessionIdCache = Object.create(null);
+let analyticsInitialized = false;
 
 function getChatIdentityKey() {
   if (currentUser && typeof currentUser === 'object') {
@@ -55,6 +57,82 @@ function getChatIdentityKey() {
 function getChatSessionStorageKey() {
   return CHAT_SESSION_STORAGE_KEY + '_' + getChatIdentityKey();
 }
+
+function initAnalytics() {
+  if (analyticsInitialized) return;
+  analyticsInitialized = true;
+
+  if (!GA4_MEASUREMENT_ID || typeof document === 'undefined') {
+    return;
+  }
+
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function () {
+    window.dataLayer.push(arguments);
+  };
+
+  window.gtag('js', new Date());
+  window.gtag('config', GA4_MEASUREMENT_ID, {
+    anonymize_ip: true,
+    send_page_view: true
+  });
+
+  if (!document.querySelector('script[data-ga4="1"]')) {
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(GA4_MEASUREMENT_ID);
+    script.dataset.ga4 = '1';
+    document.head.appendChild(script);
+  }
+}
+
+function trackAnalyticsEvent(eventName, params) {
+  if (!eventName || !GA4_MEASUREMENT_ID || typeof window.gtag !== 'function') {
+    return;
+  }
+
+  const payload = {};
+  if (params && typeof params === 'object') {
+    Object.keys(params).forEach((key) => {
+      const value = params[key];
+      if (value === undefined || value === null || value === '') return;
+      payload[key] = typeof value === 'string' ? value.slice(0, 100) : value;
+    });
+  }
+
+  try {
+    window.gtag('event', eventName, payload);
+  } catch (err) {
+    // Ignore analytics transport errors.
+  }
+}
+
+function getCtaContext(el) {
+  if (!el) return 'unknown';
+
+  const section = el.closest('section[id]');
+  if (section && section.id) return section.id;
+  if (el.closest('.navbar')) return 'navbar';
+  if (el.closest('#mobileStickyCta')) return 'sticky';
+  return 'unknown';
+}
+
+function initAnalyticsEventBindings() {
+  document.addEventListener('click', (event) => {
+    const trigger = event.target && event.target.closest ? event.target.closest('button, a') : null;
+    if (!trigger) return;
+
+    const onClickAttr = String(trigger.getAttribute('onclick') || '');
+    if (onClickAttr.includes("openModal('consultModal')") || onClickAttr.includes('openModal("consultModal")')) {
+      trackAnalyticsEvent('cta_click', {
+        cta_type: 'consult_open',
+        cta_context: getCtaContext(trigger)
+      });
+    }
+  });
+}
+
+window.trackAnalyticsEvent = trackAnalyticsEvent;
 
 // Kompot.ai CRM webhook — fire-and-forget, never blocks UI
 function sendToKompotCRM(data) {
@@ -1131,6 +1209,8 @@ function initDarkMode() {
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
+  initAnalytics();
+  initAnalyticsEventBindings();
   initDarkMode();
   storeOriginals();
   initNavbar();
@@ -1458,6 +1538,7 @@ async function handleLogin(e) {
       localStorage.setItem('quantum_user', JSON.stringify(currentUser));
       updateUIForLoggedIn();
       closeModal('loginModal');
+      trackAnalyticsEvent('login', { method: 'password' });
       showToast('Welcome back, ' + currentUser.name + '!', 'success');
       form.reset();
     } else {
@@ -1514,6 +1595,7 @@ async function handleRegister(e) {
       sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'registration' });
       updateUIForLoggedIn();
       closeModal('loginModal');
+      trackAnalyticsEvent('sign_up', { method: 'email_password' });
       showToast('Account created! Welcome, ' + currentUser.name + '!', 'success');
       form.reset();
     } else {
@@ -2471,6 +2553,11 @@ async function handleConsultation(e) {
     if (res.ok) {
       sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'consultation', service: data.service });
       closeModal('consultModal');
+      trackAnalyticsEvent('consult_submit', {
+        source: 'consult_modal',
+        service: data.service,
+        contact_method: form.contact_method && form.contact_method.value ? form.contact_method.value : ''
+      });
       showSuccessModal(
         'Consultation Booked!',
         'Thank you, ' + data.name + '! We will contact you via ' +
@@ -2511,6 +2598,10 @@ async function handleContact(e) {
 
     if (res.ok) {
       sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'contact', service: data.service });
+      trackAnalyticsEvent('consult_submit', {
+        source: 'contact_form',
+        service: data.service
+      });
       showSuccessModal(
         'Request Sent!',
         'Thank you, ' + data.name + '! We will contact you shortly via WhatsApp or Telegram.'
@@ -2535,6 +2626,12 @@ async function handlePurchase(productId, productName, amount, currency) {
 
   const stripeSupported = ['USD', 'EUR', 'GBP', 'KZT'];
   if (stripeSupported.includes((currency || '').toUpperCase())) {
+    trackAnalyticsEvent('begin_checkout', {
+      currency: (currency || '').toUpperCase(),
+      value: Number(amount) || 0,
+      item_id: productId,
+      item_name: productName
+    });
     showToast('Redirecting to secure checkout...', 'info');
     try {
       const res = await apiFetch('/api/create-checkout-session', {
@@ -2556,6 +2653,13 @@ async function handlePurchase(productId, productName, amount, currency) {
 
   // Fallback: demo payment modal for non-Stripe currencies (KGS, RUB)
   currentPayment = { productId, productName, amount, currency };
+  trackAnalyticsEvent('begin_checkout', {
+    currency: (currency || '').toUpperCase(),
+    value: Number(amount) || 0,
+    item_id: productId,
+    item_name: productName,
+    checkout_type: 'onsite'
+  });
 
   const summary = document.getElementById('paymentSummary');
   summary.innerHTML = `
@@ -2617,6 +2721,13 @@ async function handlePayment(e) {
         }
       }
 
+      trackAnalyticsEvent('payment_success', {
+        currency: currentPayment.currency,
+        value: Number(currentPayment.amount) || 0,
+        item_id: currentPayment.productId,
+        item_name: currentPayment.productName,
+        payment_channel: notifyMethod
+      });
       showSuccessModal(
         'Payment Successful!',
         `Thank you for purchasing ${currentPayment.productName}! Your order ID is ${result.payment.id}. A confirmation has been sent via ${notifyMethod === 'both' ? 'WhatsApp and Telegram' : notifyMethod}.`

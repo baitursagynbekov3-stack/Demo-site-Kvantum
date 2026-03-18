@@ -1051,7 +1051,7 @@
   </div>
 
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260318-4"></script>
+  <script src="./app.js?v=20260318-5"></script>
 
   <script>
     // Video Reviews Modal
@@ -1106,6 +1106,9 @@
     (function() {
       var params = new URLSearchParams(window.location.search);
       if (params.get('payment') === 'success') {
+        if (window.trackAnalyticsEvent) {
+          window.trackAnalyticsEvent('payment_success', { source: 'stripe_return' });
+        }
         window.history.replaceState({}, '', window.location.pathname);
         setTimeout(function() { showToast('Payment successful! Thank you for your purchase.', 'success'); }, 500);
       } else if (params.get('payment') === 'cancelled') {

@@ -38,6 +38,10 @@
   // Cloudflare Turnstile site key (public key for frontend widget).
   window.QUANTUM_TURNSTILE_SITE_KEY = '0x4AAAAAACp5xU0M94sIaWOg';
 
+  // Google Analytics 4 Measurement ID (example: G-XXXXXXXXXX).
+  // Keep empty until GA4 property is created.
+  window.QUANTUM_GA4_MEASUREMENT_ID = '';
+
   // Demo admin emails — these accounts get admin access in demo mode.
   // In production, admin is determined by DB role + ADMIN_EMAILS bootstrap on backend.
   window.QUANTUM_DEMO_ADMIN_EMAILS = ['admin@quantum.com'];
