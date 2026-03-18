@@ -2006,7 +2006,7 @@ async function refreshAdminOverview() {
   }
 }
 
-async function openAdminDashboard() {
+function openAdminDashboard() {
   const dropdown = document.getElementById('userDropdown');
   if (dropdown) dropdown.style.display = 'none';
 
@@ -2022,14 +2022,7 @@ async function openAdminDashboard() {
     return;
   }
 
-  const panelBody = ensureAdminModalExists();
-  if (!panelBody) {
-    showToast(currentLang === 'ru' ? 'Не удалось открыть дашборд.' : 'Unable to open dashboard.', 'error');
-    return;
-  }
-
-  openModal('adminModal');
-  await refreshAdminOverview();
+  window.location.href = './admin.html';
 }
 
 // ===== Modals =====
