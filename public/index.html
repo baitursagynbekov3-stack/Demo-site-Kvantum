@@ -415,8 +415,8 @@
                data-poster=""
                onclick="openVideoReview(this)">
             <div class="video-review-thumb">
-              <video class="video-review-poster" muted preload="metadata" playsinline>
-                <source src="/videos/review-1.mp4" type="video/mp4">
+              <video class="video-review-poster" muted preload="none" playsinline data-lazy-video="1">
+                <source data-src="/videos/review-1.mp4" type="video/mp4">
               </video>
               <div class="video-play-overlay">
                 <div class="play-circle">
@@ -436,8 +436,8 @@
                data-poster=""
                onclick="openVideoReview(this)">
             <div class="video-review-thumb">
-              <video class="video-review-poster" muted preload="metadata" playsinline>
-                <source src="/videos/review-2.mp4" type="video/mp4">
+              <video class="video-review-poster" muted preload="none" playsinline data-lazy-video="1">
+                <source data-src="/videos/review-2.mp4" type="video/mp4">
               </video>
               <div class="video-play-overlay">
                 <div class="play-circle">
@@ -457,8 +457,8 @@
                data-poster="/images/review-3-poster.jpg"
                onclick="openVideoReview(this)">
             <div class="video-review-thumb">
-              <video class="video-review-poster" muted preload="metadata" playsinline poster="/images/review-3-poster.jpg">
-                <source src="/videos/review-3.mp4" type="video/mp4">
+              <video class="video-review-poster" muted preload="none" playsinline poster="/images/review-3-poster.jpg" data-lazy-video="1">
+                <source data-src="/videos/review-3.mp4" type="video/mp4">
               </video>
               <div class="video-play-overlay">
                 <div class="play-circle">
@@ -1015,7 +1015,7 @@
   </div>
 
   <script src="./config.js"></script>
-  <script src="./app.js?v=20260313-1"></script>
+  <script src="./app.js?v=20260318-2"></script>
 
   <script>
     // Video Reviews Modal

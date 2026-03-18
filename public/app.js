@@ -1135,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initNavbar();
   initScrollAnimations();
   initCounterAnimations();
+  initMediaLazyLoading();
   checkAuth();
   enforceLanguagePolicy();
   loadSiteContent();
@@ -1279,6 +1280,47 @@ function initCounterAnimations() {
   if (statsSection) {
     observer.observe(statsSection);
   }
+}
+
+function hydrateLazyVideo(videoEl) {
+  if (!videoEl) return;
+  const sourceEl = videoEl.querySelector('source[data-src]');
+  if (!sourceEl) return;
+
+  const src = String(sourceEl.getAttribute('data-src') || '').trim();
+  if (!src) return;
+
+  sourceEl.setAttribute('src', src);
+  sourceEl.removeAttribute('data-src');
+
+  try {
+    videoEl.load();
+  } catch (err) {
+    // Ignore video load errors for lazy preview assets.
+  }
+}
+
+function initMediaLazyLoading() {
+  const lazyVideos = Array.from(document.querySelectorAll('video[data-lazy-video="1"]'));
+  if (!lazyVideos.length) return;
+
+  if (typeof IntersectionObserver !== 'function') {
+    lazyVideos.forEach(hydrateLazyVideo);
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries, obs) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      hydrateLazyVideo(entry.target);
+      obs.unobserve(entry.target);
+    });
+  }, {
+    rootMargin: '220px 0px',
+    threshold: 0.01
+  });
+
+  lazyVideos.forEach((videoEl) => observer.observe(videoEl));
 }
 
 function animateCounter(el, target) {
