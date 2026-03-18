@@ -1527,16 +1527,21 @@ async function loadSiteContent() {
     ]);
     const testimonials = await tRes.json();
     const programs = await pRes.json();
+
     if (Array.isArray(testimonials) && testimonials.length > 0) {
       cachedTestimonials = testimonials;
       renderTestimonials(testimonials);
     }
-    if (Array.isArray(programs) && programs.length > 0) {
+
+    if (Array.isArray(programs)) {
       cachedPrograms = programs;
       renderPrograms(programs);
+    } else {
+      renderPrograms([]);
     }
   } catch (err) {
-    // Fallback: keep hardcoded HTML
+    // No fallback stubs for programs: keep pricing grid empty on fetch errors.
+    renderPrograms([]);
   }
 }
 
@@ -1573,9 +1578,16 @@ function renderTestimonials(items) {
 
 function renderPrograms(items) {
   const grid = document.querySelector('.pricing-grid');
-  if (!grid || !items.length) return;
+  if (!grid) return;
+
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    grid.innerHTML = '';
+    return;
+  }
+
   const lang = currentLang;
-  const ordered = [...items].sort((a, b) => {
+  const ordered = [...list].sort((a, b) => {
     const aOrder = Number.parseInt(a && a.order, 10);
     const bOrder = Number.parseInt(b && b.order, 10);
     const safeA = Number.isFinite(aOrder) ? aOrder : Number.MAX_SAFE_INTEGER;
