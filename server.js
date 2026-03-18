@@ -1768,7 +1768,7 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
         quantity: 1
       }],
       mode: 'payment',
-      success_url: `${process.env.SITE_URL || 'https://kvantum.us'}/?payment=success`,
+      success_url: `${process.env.SITE_URL || 'https://kvantum.us'}/?payment=success&sid={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.SITE_URL || 'https://kvantum.us'}/?payment=cancelled`,
       customer_email: req.user.email,
       metadata: {

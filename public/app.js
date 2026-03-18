@@ -21,6 +21,10 @@ const turnstileWidgetByForm = new WeakMap();
 let turnstileScriptPromise = null;
 const chatSessionIdCache = Object.create(null);
 let analyticsInitialized = false;
+const ATTRIBUTION_STORAGE_KEY = 'quantum_attribution';
+const PENDING_CHECKOUT_STORAGE_KEY = 'quantum_pending_checkout';
+let attributionData = null;
+let ecommerceListTracked = false;
 
 function getChatIdentityKey() {
   if (currentUser && typeof currentUser === 'object') {
@@ -58,6 +62,235 @@ function getChatSessionStorageKey() {
   return CHAT_SESSION_STORAGE_KEY + '_' + getChatIdentityKey();
 }
 
+function readJsonFromStorage(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function writeJsonToStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    // Ignore storage write errors.
+  }
+}
+
+function sanitizeAttributionValue(value, maxLength) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return '';
+  return trimmed.slice(0, maxLength || 120);
+}
+
+function normalizeAttribution(data) {
+  const source = sanitizeAttributionValue(data && data.source);
+  const medium = sanitizeAttributionValue(data && data.medium);
+  const campaign = sanitizeAttributionValue(data && data.campaign);
+
+  return {
+    source: source || 'direct',
+    medium: medium || 'none',
+    campaign: campaign || '(direct)',
+    term: sanitizeAttributionValue(data && data.term),
+    content: sanitizeAttributionValue(data && data.content),
+    gclid: sanitizeAttributionValue(data && data.gclid),
+    fbclid: sanitizeAttributionValue(data && data.fbclid),
+    referrer: sanitizeAttributionValue(data && data.referrer, 180),
+    landingPage: sanitizeAttributionValue(data && data.landingPage, 180),
+    capturedAt: sanitizeAttributionValue(data && data.capturedAt, 40) || new Date().toISOString()
+  };
+}
+
+function buildAttributionFromReferrer() {
+  const referrer = typeof document !== 'undefined' ? sanitizeAttributionValue(document.referrer, 180) : '';
+  if (!referrer) {
+    return normalizeAttribution({
+      source: 'direct',
+      medium: 'none',
+      campaign: '(direct)',
+      referrer: '',
+      landingPage: typeof window !== 'undefined' ? window.location.pathname || '/' : '/',
+      capturedAt: new Date().toISOString()
+    });
+  }
+
+  let source = 'referral';
+  let medium = 'referral';
+  const ref = referrer.toLowerCase();
+
+  if (ref.includes('google.')) {
+    source = 'google';
+    medium = 'organic';
+  } else if (ref.includes('yandex.')) {
+    source = 'yandex';
+    medium = 'organic';
+  } else if (ref.includes('bing.')) {
+    source = 'bing';
+    medium = 'organic';
+  } else if (ref.includes('instagram.')) {
+    source = 'instagram';
+    medium = 'social';
+  } else if (ref.includes('facebook.') || ref.includes('fb.com')) {
+    source = 'facebook';
+    medium = 'social';
+  } else if (ref.includes('t.co') || ref.includes('twitter.')) {
+    source = 'twitter';
+    medium = 'social';
+  }
+
+  return normalizeAttribution({
+    source,
+    medium,
+    campaign: '(organic)',
+    referrer,
+    landingPage: typeof window !== 'undefined' ? window.location.pathname || '/' : '/',
+    capturedAt: new Date().toISOString()
+  });
+}
+
+function buildAttributionFromUrl() {
+  if (typeof window === 'undefined') return null;
+
+  let params = null;
+  try {
+    params = new URLSearchParams(window.location.search || '');
+  } catch (err) {
+    return null;
+  }
+
+  const source = sanitizeAttributionValue(params.get('utm_source'));
+  const medium = sanitizeAttributionValue(params.get('utm_medium'));
+  const campaign = sanitizeAttributionValue(params.get('utm_campaign'));
+  const term = sanitizeAttributionValue(params.get('utm_term'));
+  const content = sanitizeAttributionValue(params.get('utm_content'));
+  const gclid = sanitizeAttributionValue(params.get('gclid'));
+  const fbclid = sanitizeAttributionValue(params.get('fbclid'));
+
+  const hasTrackingParams = Boolean(source || medium || campaign || term || content || gclid || fbclid);
+  if (!hasTrackingParams) return null;
+
+  let inferredSource = source;
+  let inferredMedium = medium;
+
+  if (!inferredSource && gclid) inferredSource = 'google';
+  if (!inferredSource && fbclid) inferredSource = 'facebook';
+  if (!inferredMedium && gclid) inferredMedium = 'cpc';
+  if (!inferredMedium && fbclid) inferredMedium = 'paid_social';
+
+  return normalizeAttribution({
+    source: inferredSource || 'campaign',
+    medium: inferredMedium || 'campaign',
+    campaign,
+    term,
+    content,
+    gclid,
+    fbclid,
+    referrer: typeof document !== 'undefined' ? document.referrer : '',
+    landingPage: window.location.pathname || '/',
+    capturedAt: new Date().toISOString()
+  });
+}
+
+function initAttribution() {
+  if (attributionData) return attributionData;
+
+  const storedRaw = readJsonFromStorage(ATTRIBUTION_STORAGE_KEY);
+  const fromStorage = storedRaw ? normalizeAttribution(storedRaw) : null;
+  const fromUrl = buildAttributionFromUrl();
+
+  if (fromUrl) {
+    attributionData = fromStorage ? { ...fromStorage, ...fromUrl } : fromUrl;
+    writeJsonToStorage(ATTRIBUTION_STORAGE_KEY, attributionData);
+    return attributionData;
+  }
+
+  if (fromStorage) {
+    attributionData = fromStorage;
+    return attributionData;
+  }
+
+  attributionData = buildAttributionFromReferrer();
+  writeJsonToStorage(ATTRIBUTION_STORAGE_KEY, attributionData);
+  return attributionData;
+}
+
+function getAttributionData() {
+  return attributionData || initAttribution();
+}
+
+function getAttributionEventParams() {
+  const a = getAttributionData();
+  return {
+    traffic_source: a.source || 'direct',
+    traffic_medium: a.medium || 'none',
+    traffic_campaign: a.campaign || '(direct)',
+    traffic_term: a.term || '',
+    traffic_content: a.content || '',
+    traffic_referrer: a.referrer || '',
+    traffic_landing_page: a.landingPage || '',
+    traffic_gclid: a.gclid || '',
+    traffic_fbclid: a.fbclid || ''
+  };
+}
+
+function getAttributionPayloadFields() {
+  const a = getAttributionData();
+  return {
+    utmSource: a.source || 'direct',
+    utmMedium: a.medium || 'none',
+    utmCampaign: a.campaign || '(direct)',
+    utmTerm: a.term || '',
+    utmContent: a.content || '',
+    gclid: a.gclid || '',
+    fbclid: a.fbclid || '',
+    referrer: a.referrer || '',
+    landingPage: a.landingPage || ''
+  };
+}
+
+function storePendingCheckout(payload) {
+  if (!payload || typeof payload !== 'object') return;
+
+  writeJsonToStorage(PENDING_CHECKOUT_STORAGE_KEY, {
+    productId: sanitizeAttributionValue(payload.productId, 100),
+    productName: sanitizeAttributionValue(payload.productName, 100),
+    amount: Number(payload.amount) || 0,
+    currency: sanitizeAttributionValue(payload.currency, 10) || 'USD',
+    checkoutType: sanitizeAttributionValue(payload.checkoutType, 40) || 'onsite',
+    createdAt: Date.now()
+  });
+}
+
+function getPendingCheckout() {
+  const data = readJsonFromStorage(PENDING_CHECKOUT_STORAGE_KEY);
+  if (!data) return null;
+
+  const createdAt = Number(data.createdAt || 0);
+  if (!createdAt || (Date.now() - createdAt > 3 * 24 * 60 * 60 * 1000)) {
+    try {
+      localStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
+    } catch (err) {
+      // Ignore remove errors.
+    }
+    return null;
+  }
+
+  return data;
+}
+
+function clearPendingCheckout() {
+  try {
+    localStorage.removeItem(PENDING_CHECKOUT_STORAGE_KEY);
+  } catch (err) {
+    // Ignore remove errors.
+  }
+}
+
 function initAnalytics() {
   if (analyticsInitialized) return;
   analyticsInitialized = true;
@@ -91,12 +324,29 @@ function trackAnalyticsEvent(eventName, params) {
     return;
   }
 
-  const payload = {};
+  const payload = { ...getAttributionEventParams() };
+
   if (params && typeof params === 'object') {
     Object.keys(params).forEach((key) => {
       const value = params[key];
       if (value === undefined || value === null || value === '') return;
-      payload[key] = typeof value === 'string' ? value.slice(0, 100) : value;
+
+      if (key === 'items' && Array.isArray(value)) {
+        payload[key] = value.slice(0, 20).map((item) => ({ ...item }));
+        return;
+      }
+
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        payload[key] = value;
+        return;
+      }
+
+      if (typeof value === 'string') {
+        payload[key] = value.slice(0, 180);
+        return;
+      }
+
+      payload[key] = value;
     });
   }
 
@@ -117,6 +367,159 @@ function getCtaContext(el) {
   return 'unknown';
 }
 
+function parsePurchaseCall(onClickAttr) {
+  const attr = String(onClickAttr || '');
+  const match = attr.match(/handlePurchase\(\s*'([^']*)'\s*,\s*'([^']*)'\s*,\s*([\d.]+)\s*,\s*'([^']*)'\s*\)/);
+  if (!match) return null;
+
+  const amount = Number(match[3]);
+  return {
+    productId: match[1],
+    productName: match[2],
+    amount: Number.isFinite(amount) ? amount : 0,
+    currency: (match[4] || '').toUpperCase()
+  };
+}
+
+function buildEcommerceItemFromCard(card, index) {
+  if (!card) return null;
+
+  const button = card.querySelector('button[onclick*="handlePurchase("]');
+  const parsed = parsePurchaseCall(button && button.getAttribute('onclick'));
+  if (!parsed) return null;
+
+  const tier = sanitizeAttributionValue(card.getAttribute('data-tier'), 60) || 'program';
+
+  return {
+    item_id: sanitizeAttributionValue(parsed.productId, 100) || sanitizeAttributionValue(parsed.productName, 100) || ('program_' + String(index + 1)),
+    item_name: sanitizeAttributionValue(parsed.productName, 100) || ('Program ' + String(index + 1)),
+    price: Number(parsed.amount) || 0,
+    currency: sanitizeAttributionValue(parsed.currency, 10) || 'KGS',
+    item_category: tier,
+    item_list_id: 'programs',
+    item_list_name: 'Programs',
+    index: index + 1
+  };
+}
+
+function collectProgramsForAnalytics() {
+  const cards = Array.from(document.querySelectorAll('#programs .pricing-card'));
+  return cards
+    .map((card, index) => buildEcommerceItemFromCard(card, index))
+    .filter((item) => item && item.item_id && item.item_name);
+}
+
+function findProgramEcommerceItem(productId, productName, amount, currency) {
+  const normalizedId = String(productId || '').trim();
+  const normalizedName = String(productName || '').trim();
+  const normalizedCurrency = String(currency || '').trim().toUpperCase();
+  const items = collectProgramsForAnalytics();
+
+  const matched = items.find((item) => (
+    (normalizedId && item.item_id === normalizedId)
+    || (normalizedName && item.item_name.toLowerCase() === normalizedName.toLowerCase())
+  ));
+
+  if (matched) {
+    return {
+      ...matched,
+      price: Number.isFinite(Number(amount)) ? Number(amount) : matched.price,
+      currency: normalizedCurrency || matched.currency
+    };
+  }
+
+  return {
+    item_id: sanitizeAttributionValue(normalizedId, 100) || sanitizeAttributionValue(normalizedName, 100) || 'custom_program',
+    item_name: sanitizeAttributionValue(normalizedName, 100) || sanitizeAttributionValue(normalizedId, 100) || 'Program',
+    price: Number(amount) || 0,
+    currency: normalizedCurrency || 'KGS',
+    item_category: 'program',
+    item_list_id: 'programs',
+    item_list_name: 'Programs',
+    index: 0
+  };
+}
+
+function initEcommerceTracking() {
+  const programsSection = document.getElementById('programs');
+  if (!programsSection) return;
+
+  const trackListView = () => {
+    if (ecommerceListTracked) return;
+
+    const items = collectProgramsForAnalytics();
+    if (!items.length) return;
+
+    ecommerceListTracked = true;
+    trackAnalyticsEvent('view_item_list', {
+      item_list_id: 'programs',
+      item_list_name: 'Programs',
+      items
+    });
+  };
+
+  if (typeof IntersectionObserver !== 'function') {
+    trackListView();
+    return;
+  }
+
+  const observer = new IntersectionObserver((entries, obs) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      trackListView();
+      obs.disconnect();
+    });
+  }, {
+    threshold: 0.35
+  });
+
+  observer.observe(programsSection);
+}
+
+function handleStripeReturnStatus(status, sessionId) {
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  if (!normalizedStatus) return false;
+
+  if (normalizedStatus === 'success') {
+    const pending = getPendingCheckout();
+
+    if (pending) {
+      const item = findProgramEcommerceItem(pending.productId, pending.productName, pending.amount, pending.currency);
+
+      trackAnalyticsEvent('payment_success', {
+        source: 'stripe_return',
+        transaction_id: String(sessionId || ''),
+        currency: pending.currency || 'USD',
+        value: Number(pending.amount) || 0,
+        item_id: item.item_id,
+        item_name: item.item_name
+      });
+
+      trackAnalyticsEvent('purchase', {
+        transaction_id: String(sessionId || '').trim() || ('stripe_' + String(Date.now())),
+        currency: pending.currency || 'USD',
+        value: Number(pending.amount) || 0,
+        items: [item],
+        payment_type: 'stripe'
+      });
+    } else {
+      trackAnalyticsEvent('payment_success', { source: 'stripe_return' });
+    }
+
+    clearPendingCheckout();
+    return true;
+  }
+
+  if (normalizedStatus === 'cancelled') {
+    clearPendingCheckout();
+    return true;
+  }
+
+  return false;
+}
+
+window.handleStripeReturnStatus = handleStripeReturnStatus;
+
 function initAnalyticsEventBindings() {
   document.addEventListener('click', (event) => {
     const trigger = event.target && event.target.closest ? event.target.closest('button, a') : null;
@@ -136,6 +539,8 @@ window.trackAnalyticsEvent = trackAnalyticsEvent;
 
 // Kompot.ai CRM webhook — fire-and-forget, never blocks UI
 function sendToKompotCRM(data) {
+  const attribution = getAttributionPayloadFields();
+
   fetch('https://kompot.ai/api/ws/konton/workflows/webhook/6sl6qjjfac', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -144,7 +549,9 @@ function sendToKompotCRM(data) {
       email: data.email || '',
       phone: data.phone || '',
       source: data.source || 'website',
-      service: data.service || ''
+      service: data.service || '',
+      bookingId: data.bookingId || '',
+      ...attribution
     })
   }).catch(() => {});
 }
@@ -1178,7 +1585,7 @@ function renderPrograms(items) {
       btnHtml = `<button class="btn btn-primary btn-block" onclick="handlePurchase('${escapeHtml(p._id || p.id)}', '${escapeHtml(p.name)}', ${p.priceNumeric || 0}, '${escapeHtml(p.purchaseCurrency || 'KGS')}')">${escapeHtml(btnText)}</button>`;
     }
 
-    return `<div class="pricing-card anim-fade-up anim-visible ${cssClass}" data-tier="${escapeHtml(p.tier || '')}">
+    return `<div class="pricing-card anim-fade-up anim-visible ${cssClass}" data-tier="${escapeHtml(p.tier || '')}" data-product-id="${escapeHtml(String(p._id || p.id || ''))}" data-product-name="${escapeHtml(String(p.name || ''))}" data-product-price="${escapeHtml(String(p.priceNumeric || 0))}" data-product-currency="${escapeHtml(String(p.purchaseCurrency || 'KGS'))}">
       ${popularBadge}${tierBadge}
       <h3 class="pricing-name">${escapeHtml(name)}</h3>
       <p class="pricing-tagline">${escapeHtml(tagline)}</p>
@@ -1209,8 +1616,10 @@ function initDarkMode() {
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
+  initAttribution();
   initAnalytics();
   initAnalyticsEventBindings();
+  initEcommerceTracking();
   initDarkMode();
   storeOriginals();
   initNavbar();
@@ -2533,13 +2942,15 @@ async function handleConsultation(e) {
   const form = e.target;
   const countryCode = form.countryCode ? form.countryCode.value : '+996';
   const phone = normalizePhone(form.phone.value, countryCode);
+  const attribution = getAttributionPayloadFields();
   const data = {
     name: form.name.value,
     email: form.email.value,
     phone: phone,
     service: form.service.value,
     message: '',
-    captchaToken: getFormCaptchaToken(form)
+    captchaToken: getFormCaptchaToken(form),
+    ...attribution
   };
 
   try {
@@ -2551,13 +2962,42 @@ async function handleConsultation(e) {
     const result = await res.json();
 
     if (res.ok) {
-      sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'consultation', service: data.service });
+      const bookingId = result && result.booking && result.booking.id ? String(result.booking.id) : '';
+      const contactMethod = form.contact_method && form.contact_method.value ? form.contact_method.value : '';
+
+      sendToKompotCRM({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        source: 'consultation',
+        service: data.service,
+        bookingId
+      });
+
       closeModal('consultModal');
+
       trackAnalyticsEvent('consult_submit', {
         source: 'consult_modal',
         service: data.service,
-        contact_method: form.contact_method && form.contact_method.value ? form.contact_method.value : ''
+        booking_id: bookingId,
+        contact_method: contactMethod
       });
+
+      trackAnalyticsEvent('generate_lead', {
+        lead_source: 'consult_modal',
+        service: data.service,
+        booking_id: bookingId,
+        contact_method: contactMethod,
+        value: 1
+      });
+
+      trackAnalyticsEvent('lead_created', {
+        lead_source: 'consult_modal',
+        service: data.service,
+        booking_id: bookingId,
+        contact_method: contactMethod
+      });
+
       showSuccessModal(
         'Consultation Booked!',
         'Thank you, ' + data.name + '! We will contact you via ' +
@@ -2579,13 +3019,15 @@ async function handleContact(e) {
   const form = e.target;
   const countryCode = form.countryCode ? form.countryCode.value : '+996';
   const phone = normalizePhone(form.phone.value, countryCode);
+  const attribution = getAttributionPayloadFields();
   const data = {
     name: form.name.value,
     email: form.email.value,
     phone: phone,
     service: form.service.value,
     message: form.message.value,
-    captchaToken: getFormCaptchaToken(form)
+    captchaToken: getFormCaptchaToken(form),
+    ...attribution
   };
 
   try {
@@ -2597,11 +3039,36 @@ async function handleContact(e) {
     const result = await res.json();
 
     if (res.ok) {
-      sendToKompotCRM({ name: data.name, email: data.email, phone: data.phone, source: 'contact', service: data.service });
+      const bookingId = result && result.booking && result.booking.id ? String(result.booking.id) : '';
+
+      sendToKompotCRM({
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        source: 'contact',
+        service: data.service,
+        bookingId
+      });
+
       trackAnalyticsEvent('consult_submit', {
         source: 'contact_form',
-        service: data.service
+        service: data.service,
+        booking_id: bookingId
       });
+
+      trackAnalyticsEvent('generate_lead', {
+        lead_source: 'contact_form',
+        service: data.service,
+        booking_id: bookingId,
+        value: 1
+      });
+
+      trackAnalyticsEvent('lead_created', {
+        lead_source: 'contact_form',
+        service: data.service,
+        booking_id: bookingId
+      });
+
       showSuccessModal(
         'Request Sent!',
         'Thank you, ' + data.name + '! We will contact you shortly via WhatsApp or Telegram.'
@@ -2624,20 +3091,53 @@ async function handlePurchase(productId, productName, amount, currency) {
     return;
   }
 
+  const normalizedCurrency = (currency || '').toUpperCase();
+  const numericAmount = Number(amount) || 0;
+  const item = findProgramEcommerceItem(productId, productName, numericAmount, normalizedCurrency);
+
+  trackAnalyticsEvent('select_item', {
+    item_list_id: 'programs',
+    item_list_name: 'Programs',
+    items: [item]
+  });
+
+  trackAnalyticsEvent('view_item', {
+    currency: item.currency,
+    value: Number(item.price) || 0,
+    items: [item]
+  });
+
+  const checkoutEventPayload = {
+    currency: item.currency,
+    value: Number(item.price) || 0,
+    item_id: item.item_id,
+    item_name: item.item_name,
+    item_list_id: item.item_list_id,
+    item_list_name: item.item_list_name,
+    items: [item]
+  };
+
   const stripeSupported = ['USD', 'EUR', 'GBP', 'KZT'];
-  if (stripeSupported.includes((currency || '').toUpperCase())) {
-    trackAnalyticsEvent('begin_checkout', {
-      currency: (currency || '').toUpperCase(),
-      value: Number(amount) || 0,
-      item_id: productId,
-      item_name: productName
+  if (stripeSupported.includes(normalizedCurrency)) {
+    storePendingCheckout({
+      productId,
+      productName,
+      amount: numericAmount,
+      currency: normalizedCurrency,
+      checkoutType: 'stripe'
     });
+
+    trackAnalyticsEvent('begin_checkout', {
+      ...checkoutEventPayload,
+      checkout_type: 'stripe'
+    });
+
     showToast('Redirecting to secure checkout...', 'info');
     try {
       const res = await apiFetch('/api/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-        body: JSON.stringify({ productId, productName, amount, currency })
+        body: JSON.stringify({ productId, productName, amount: numericAmount, currency: normalizedCurrency })
       });
       const data = await res.json();
       if (data.url) {
@@ -2652,23 +3152,28 @@ async function handlePurchase(productId, productName, amount, currency) {
   }
 
   // Fallback: demo payment modal for non-Stripe currencies (KGS, RUB)
-  currentPayment = { productId, productName, amount, currency };
+  currentPayment = { productId, productName, amount: numericAmount, currency: normalizedCurrency || currency };
+  storePendingCheckout({
+    productId,
+    productName,
+    amount: numericAmount,
+    currency: normalizedCurrency || currency,
+    checkoutType: 'onsite'
+  });
+
   trackAnalyticsEvent('begin_checkout', {
-    currency: (currency || '').toUpperCase(),
-    value: Number(amount) || 0,
-    item_id: productId,
-    item_name: productName,
+    ...checkoutEventPayload,
     checkout_type: 'onsite'
   });
 
   const summary = document.getElementById('paymentSummary');
   summary.innerHTML = `
     <h3>${productName}</h3>
-    <div class="payment-amount">${currency === 'USD' ? '$' : ''}${amount.toLocaleString()} ${currency !== 'USD' ? currency : ''}</div>
+    <div class="payment-amount">${normalizedCurrency === 'USD' ? '$' : ''}${numericAmount.toLocaleString()} ${normalizedCurrency !== 'USD' ? normalizedCurrency : ''}</div>
   `;
 
   const payBtn = document.getElementById('payBtn');
-  payBtn.textContent = `Pay ${currency === 'USD' ? '$' : ''}${amount.toLocaleString()} ${currency !== 'USD' ? currency : ''}`;
+  payBtn.textContent = `Pay ${normalizedCurrency === 'USD' ? '$' : ''}${numericAmount.toLocaleString()} ${normalizedCurrency !== 'USD' ? normalizedCurrency : ''}`;
 
   openModal('paymentModal');
 }
@@ -2721,13 +3226,33 @@ async function handlePayment(e) {
         }
       }
 
+      const item = findProgramEcommerceItem(
+        currentPayment.productId,
+        currentPayment.productName,
+        currentPayment.amount,
+        currentPayment.currency
+      );
+
       trackAnalyticsEvent('payment_success', {
         currency: currentPayment.currency,
         value: Number(currentPayment.amount) || 0,
-        item_id: currentPayment.productId,
-        item_name: currentPayment.productName,
-        payment_channel: notifyMethod
+        item_id: item.item_id,
+        item_name: item.item_name,
+        payment_channel: notifyMethod,
+        transaction_id: result && result.payment && result.payment.id ? String(result.payment.id) : ''
       });
+
+      trackAnalyticsEvent('purchase', {
+        transaction_id: result && result.payment && result.payment.id ? String(result.payment.id) : ('onsite_' + String(Date.now())),
+        currency: currentPayment.currency,
+        value: Number(currentPayment.amount) || 0,
+        items: [item],
+        payment_channel: notifyMethod,
+        payment_type: 'onsite'
+      });
+
+      clearPendingCheckout();
+
       showSuccessModal(
         'Payment Successful!',
         `Thank you for purchasing ${currentPayment.productName}! Your order ID is ${result.payment.id}. A confirmation has been sent via ${notifyMethod === 'both' ? 'WhatsApp and Telegram' : notifyMethod}.`
@@ -2792,6 +3317,19 @@ async function sendChatMessage(e) {
     addChatMessage(result.reply || '...', 'bot');
 
     if (result.booking && result.booking.id) {
+      const bookingId = String(result.booking.id);
+
+      trackAnalyticsEvent('generate_lead', {
+        lead_source: 'chatbot',
+        booking_id: bookingId,
+        value: 1
+      });
+
+      trackAnalyticsEvent('lead_created', {
+        lead_source: 'chatbot',
+        booking_id: bookingId
+      });
+
       const toastMessage = currentLang === 'ru'
         ? `Заявка #${result.booking.id} создана. Мы скоро свяжемся с вами.`
         : `Booking #${result.booking.id} created. We will contact you shortly.`;
