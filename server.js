@@ -1898,6 +1898,7 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
 
     const [
       totalUsers,
+      totalAdmins,
       totalBookings,
       totalPayments,
       users,
@@ -1905,6 +1906,7 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
       payments
     ] = await prisma.$transaction([
       prisma.user.count(),
+      prisma.user.count({ where: { role: 'admin' } }),
       prisma.booking.count(),
       prisma.payment.count(),
       prisma.user.findMany({
@@ -1915,6 +1917,7 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
           name: true,
           email: true,
           phone: true,
+          role: true,
           createdAt: true
         }
       }),
@@ -1958,6 +1961,7 @@ app.get('/api/admin/overview', authenticateAdmin, async (req, res) => {
     res.json({
       totals: {
         users: totalUsers,
+        admins: totalAdmins,
         bookings: totalBookings,
         payments: totalPayments
       },

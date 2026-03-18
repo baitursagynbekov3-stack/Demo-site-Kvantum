@@ -1396,7 +1396,7 @@ body.dark-mode .phone-input-group .country-code-select {
 }
 .admin-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
 }
 .admin-stat-card {

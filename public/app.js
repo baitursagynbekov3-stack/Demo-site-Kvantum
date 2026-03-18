@@ -525,6 +525,7 @@ function demoApi(path, options) {
         name: user.name,
         email: user.email,
         phone: user.phone || '',
+        role: user.role || 'user',
         createdAt: user.createdAt || new Date().toISOString()
       }))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -534,15 +535,21 @@ function demoApi(path, options) {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     const payments = getStorageArray(paymentsKey)
-      .map((payment) => ({
-        ...payment,
-        user: null
-      }))
+      .map((payment) => {
+        const owner = users.find((item) => Number(item.id) === Number(payment.userId));
+        return {
+          ...payment,
+          user: owner ? { id: owner.id, name: owner.name, email: owner.email } : null
+        };
+      })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const adminsCount = users.filter((user) => normalizeAdminValue(user.role) === 'admin').length;
 
     return createApiResponse(200, {
       totals: {
         users: users.length,
+        admins: adminsCount,
         bookings: bookings.length,
         payments: payments.length
       },
@@ -1639,9 +1646,11 @@ function normalizeAdminValue(value) {
 function getAdminLabels() {
   if (currentLang === 'ru') {
     return {
-      users: 'Пользователи',
+      users: 'Клиенты',
+      admins: 'Админы',
       bookings: 'Заявки',
       payments: 'Оплаты',
+      adminsTitle: 'Администраторы сайта',
       usersTitle: 'Последние регистрации',
       bookingsTitle: 'Последние заявки',
       paymentsTitle: 'Последние оплаты',
@@ -1667,6 +1676,7 @@ function getAdminLabels() {
       clear: 'Сбросить',
       saved: 'Заявка обновлена',
       saveError: 'Не удалось обновить заявку',
+      adminRole: 'Администратор',
       status: {
         pending: 'Ожидание',
         new: 'Новая',
@@ -1678,9 +1688,11 @@ function getAdminLabels() {
   }
 
   return {
-    users: 'Users',
+    users: 'Clients',
+    admins: 'Admins',
     bookings: 'Bookings',
     payments: 'Payments',
+    adminsTitle: 'Site Admins',
     usersTitle: 'Latest Registrations',
     bookingsTitle: 'Latest Requests',
     paymentsTitle: 'Latest Payments',
@@ -1706,6 +1718,7 @@ function getAdminLabels() {
     clear: 'Clear',
     saved: 'Booking updated',
     saveError: 'Failed to update booking',
+    adminRole: 'Administrator',
     status: {
       pending: 'Pending',
       new: 'New',
@@ -1811,7 +1824,11 @@ function renderAdminOverview(data) {
   const searchQuery = normalizeAdminValue(adminFilters.search);
   const bookingStatusFilter = normalizeAdminValue(adminFilters.bookingStatus || 'all');
 
-  const users = usersRaw.filter((user) => matchesAdminSearch(searchQuery, [user.name, user.email, user.phone]));
+  const adminsRaw = usersRaw.filter((user) => normalizeAdminValue(user.role) === 'admin');
+  const clientsRaw = usersRaw.filter((user) => normalizeAdminValue(user.role) !== 'admin');
+
+  const admins = adminsRaw.filter((user) => matchesAdminSearch(searchQuery, [user.name, user.email, user.phone, user.role]));
+  const users = clientsRaw.filter((user) => matchesAdminSearch(searchQuery, [user.name, user.email, user.phone]));
 
   const bookings = bookingsRaw.filter((booking) => {
     const statusOk = bookingStatusFilter === 'all' || normalizeAdminValue(booking.status) === bookingStatusFilter;
@@ -1829,6 +1846,8 @@ function renderAdminOverview(data) {
   ]));
 
   const recentPayments = payments.slice(0, 6);
+  const totalAdmins = Number(totals.admins || adminsRaw.length);
+  const totalClients = Math.max(0, Number(totals.users || usersRaw.length) - totalAdmins);
   const statusOptions = ['pending', 'new', 'in_progress', 'done', 'cancelled'];
 
   panelBody.innerHTML = `
@@ -1849,10 +1868,22 @@ function renderAdminOverview(data) {
     </div>
 
     <div class="admin-stats-grid">
+      <div class="admin-stat-card"><span class="admin-stat-label">${labels.admins}</span><strong>${Number(admins.length).toLocaleString()}</strong></div>
       <div class="admin-stat-card"><span class="admin-stat-label">${labels.users}</span><strong>${Number(users.length).toLocaleString()}</strong></div>
       <div class="admin-stat-card"><span class="admin-stat-label">${labels.bookings}</span><strong>${Number(bookings.length).toLocaleString()}</strong></div>
       <div class="admin-stat-card"><span class="admin-stat-label">${labels.payments}</span><strong>${Number(payments.length).toLocaleString()}</strong></div>
     </div>
+
+    <section class="admin-section admin-section-card">
+      <div class="admin-section-head">
+        <h3>${labels.adminsTitle} (${Number(totalAdmins).toLocaleString()})</h3>
+      </div>
+      <div class="admin-payments-grid">
+        ${admins.length
+          ? admins.map((admin) => `<article class="admin-payment-card"><strong>${escapeHtml(admin.name || '-')}</strong><span>${escapeHtml(admin.email || '-')}</span><small>${escapeHtml(labels.adminRole)} • ${escapeHtml(formatAdminDate(admin.createdAt))}</small></article>`).join('')
+          : `<p class="admin-empty">—</p>`}
+      </div>
+    </section>
 
     <section class="admin-section admin-section-card admin-payments-block">
       <div class="admin-section-head">
@@ -1872,7 +1903,7 @@ function renderAdminOverview(data) {
     </section>
 
     <section class="admin-section">
-      <h3>${labels.usersTitle} (${Number(totals.users || usersRaw.length).toLocaleString()})</h3>
+      <h3>${labels.usersTitle} (${Number(totalClients).toLocaleString()})</h3>
       <div class="admin-table-wrap">
         <table class="admin-table">
           <thead>
