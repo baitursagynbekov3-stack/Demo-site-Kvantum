@@ -199,7 +199,8 @@ function demoAdminApi(path, options) {
     if (!id) {
       if (method === 'GET') return createApiResponse(200, items);
       if (method === 'POST') {
-        const item = { _id: 'd' + Date.now(), ...body, order: items.length + 1 };
+        const requestedOrder = Number.isFinite(Number(body.order)) ? Number(body.order) : items.length + 1;
+        const item = { _id: 'd' + Date.now(), ...body, order: requestedOrder };
         items.push(item);
         setStorageArray(storageKey, items);
         return createApiResponse(201, item);
@@ -251,7 +252,8 @@ function demoAdminApi(path, options) {
     const role = getDemoUserRole();
     if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
     let items = getStorageArray(keyMap.services);
-    const item = { _id: 'ds' + Date.now(), ...body };
+    const requestedOrder = Number.isFinite(Number(body.order)) ? Number(body.order) : items.length + 1;
+    const item = { _id: 'ds' + Date.now(), ...body, order: requestedOrder };
     items.push(item);
     setStorageArray(keyMap.services, items);
     return createApiResponse(201, { message: 'Service created', service: item });
@@ -502,6 +504,73 @@ function withQuery(path, params) {
   return queryString ? `${path}?${queryString}` : path;
 }
 
+function parseOrder(value, fallback) {
+  const numeric = Number.parseInt(value, 10);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function sortContentItems(items, labelResolver) {
+  const getLabel = typeof labelResolver === 'function' ? labelResolver : (item) => item && item.name;
+  return [...(Array.isArray(items) ? items : [])].sort((a, b) => {
+    const orderA = parseOrder(a && a.order, Number.MAX_SAFE_INTEGER);
+    const orderB = parseOrder(b && b.order, Number.MAX_SAFE_INTEGER);
+    if (orderA !== orderB) return orderA - orderB;
+
+    const labelA = String(getLabel(a) || '').toLowerCase();
+    const labelB = String(getLabel(b) || '').toLowerCase();
+    return labelA.localeCompare(labelB);
+  });
+}
+
+function buildReorderPayload(item, nextOrder) {
+  const payload = { ...(item || {}), order: parseOrder(nextOrder, 0) };
+  delete payload._id;
+  return payload;
+}
+
+async function moveContentItem(config) {
+  const settings = config || {};
+  const ordered = sortContentItems(settings.items, settings.labelResolver);
+  const id = String(settings.id || '');
+  const index = ordered.findIndex((item) => String(item && item._id) === id);
+  if (index === -1) return;
+
+  const targetIndex = index + Number(settings.direction || 0);
+  if (targetIndex < 0 || targetIndex >= ordered.length) return;
+
+  const current = ordered[index];
+  const target = ordered[targetIndex];
+  const currentOrder = parseOrder(current.order, index + 1);
+  const targetOrder = parseOrder(target.order, targetIndex + 1);
+
+  try {
+    const [aRes, bRes] = await Promise.all([
+      adminFetch(`${settings.endpointPrefix}/${current._id}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify(buildReorderPayload(current, targetOrder))
+      }),
+      adminFetch(`${settings.endpointPrefix}/${target._id}`, {
+        method: 'PUT',
+        headers: authHeaders(),
+        body: JSON.stringify(buildReorderPayload(target, currentOrder))
+      })
+    ]);
+
+    if (!aRes.ok || !bRes.ok) {
+      showToast(`Failed to reorder ${settings.entityName || 'items'}`, 'error');
+      return;
+    }
+
+    if (typeof settings.reload === 'function') {
+      await settings.reload();
+    }
+    showToast(`${settings.entityName || 'Content'} order updated`, 'success');
+  } catch (e) {
+    showToast(`Failed to reorder ${settings.entityName || 'items'}`, 'error');
+  }
+}
+
 // ================================================================
 // TESTIMONIALS
 // ================================================================
@@ -511,7 +580,7 @@ async function loadTestimonials() {
   try {
     const res = await adminFetch('/api/admin/testimonials', { headers: authHeaders() });
     if (res.ok) {
-      testimonials = await res.json();
+      testimonials = sortContentItems(await res.json(), (item) => item.authorName || '');
       renderTestimonialCards();
     }
   } catch (e) {
@@ -521,25 +590,34 @@ async function loadTestimonials() {
 
 function renderTestimonialCards() {
   const el = document.getElementById('testimonialsList');
-  if (!testimonials.length) {
+  const ordered = sortContentItems(testimonials, (item) => item.authorName || '');
+  testimonials = ordered;
+
+  if (!ordered.length) {
     el.innerHTML = `<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
       <p>No testimonials yet. Add your first one!</p>
     </div>`;
     return;
   }
-  el.innerHTML = testimonials.map(t => `
+
+  el.innerHTML = ordered.map((t, index) => {
+    const orderValue = parseOrder(t.order, index + 1);
+    return `
     <div class="admin-card">
-      <div class="card-badge">Order: ${t.order || 0}</div>
+      <div class="card-badge">Order: ${orderValue}</div>
       <h3>${esc(t.authorName)}</h3>
-      <p>"${esc(t.text)}"</p>
+      <p title="${esc(t.text || '')}">"${esc(truncateText(t.text, 220))}"</p>
       ${t.role ? `<div class="card-meta">${esc(t.role)}</div>` : ''}
       <div class="card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="moveTestimonial('${t._id}', -1)" ${index === 0 ? 'disabled' : ''} title="Move up">↑</button>
+        <button class="btn btn-secondary btn-sm" onclick="moveTestimonial('${t._id}', 1)" ${index === ordered.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
         <button class="btn btn-secondary btn-sm" onclick="editTestimonial('${t._id}')">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteTestimonial('${t._id}')">Delete</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function openTestimonialForm(item) {
@@ -560,6 +638,18 @@ function editTestimonial(id) {
   if (item) openTestimonialForm(item);
 }
 
+async function moveTestimonial(id, direction) {
+  await moveContentItem({
+    items: testimonials,
+    id,
+    direction,
+    endpointPrefix: '/api/admin/testimonials',
+    reload: loadTestimonials,
+    entityName: 'testimonial',
+    labelResolver: (item) => item.authorName || ''
+  });
+}
+
 async function saveTestimonial(e) {
   e.preventDefault();
   const id = document.getElementById('testimonialId').value;
@@ -570,7 +660,7 @@ async function saveTestimonial(e) {
     authorInitial: document.getElementById('tInitial').value || document.getElementById('tAuthor').value.charAt(0),
     role: document.getElementById('tRole').value,
     role_ru: document.getElementById('tRoleRu').value,
-    order: parseInt(document.getElementById('tOrder').value) || 0
+    order: parseInt(document.getElementById('tOrder').value, 10) || 0
   };
 
   try {
@@ -612,7 +702,7 @@ async function loadPrograms() {
   try {
     const res = await adminFetch('/api/admin/programs', { headers: authHeaders() });
     if (res.ok) {
-      programs = await res.json();
+      programs = sortContentItems(await res.json(), (item) => item.name || '');
       renderProgramCards();
     }
   } catch (e) {
@@ -622,25 +712,34 @@ async function loadPrograms() {
 
 function renderProgramCards() {
   const el = document.getElementById('programsList');
-  if (!programs.length) {
+  const ordered = sortContentItems(programs, (item) => item.name || '');
+  programs = ordered;
+
+  if (!ordered.length) {
     el.innerHTML = `<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
       <p>No programs yet. Add your first one!</p>
     </div>`;
     return;
   }
-  el.innerHTML = programs.map(p => {
+
+  el.innerHTML = ordered.map((p, index) => {
     const price = p.priceNumeric || 0;
     const cur = p.purchaseCurrency || 'KGS';
     const priceText = price > 0 ? (cur === 'USD' ? '$' + price.toLocaleString() : price.toLocaleString() + ' ' + cur) : 'Contact for price';
-    const features = (p.features || []).slice(0, 3);
+    const allFeatures = Array.isArray(p.features) ? p.features : [];
+    const features = allFeatures.slice(0, 3);
+    const orderValue = parseOrder(p.order, index + 1);
+
     return `<div class="admin-card">
-      ${p.popular ? '<div class="card-badge">Featured</div>' : ''}
-      <h3>${esc(p.name)}</h3>
-      <p>${esc(p.tagline || '')}</p>
-      <div class="card-meta">${priceText} · ${p.actionType === 'purchase' ? 'Buy Now' : 'Contact Us'}</div>
-      ${features.length ? `<div class="features-preview">${features.map(f => `<span>${esc(f)}</span>`).join('')}${(p.features || []).length > 3 ? `<span>+${(p.features || []).length - 3} more</span>` : ''}</div>` : ''}
+      <div class="card-badge">Order: ${orderValue}${p.popular ? ' · Featured' : ''}</div>
+      <h3 title="${esc(p.name || '')}">${esc(truncateText(p.name, 100))}</h3>
+      <p title="${esc(p.tagline || '')}">${esc(truncateText(p.tagline, 160))}</p>
+      <div class="card-meta">${esc(priceText)} · ${p.actionType === 'purchase' ? 'Buy Now' : 'Contact Us'}</div>
+      ${features.length ? `<div class="features-preview">${features.map((f) => `<span title="${esc(f)}">${esc(truncateText(f, 50))}</span>`).join('')}${allFeatures.length > 3 ? `<span>+${allFeatures.length - 3} more</span>` : ''}</div>` : ''}
       <div class="card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="moveProgram('${p._id}', -1)" ${index === 0 ? 'disabled' : ''} title="Move up">↑</button>
+        <button class="btn btn-secondary btn-sm" onclick="moveProgram('${p._id}', 1)" ${index === ordered.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
         <button class="btn btn-secondary btn-sm" onclick="editProgram('${p._id}')">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteProgram('${p._id}')">Delete</button>
       </div>
@@ -660,12 +759,25 @@ function openProgramForm(item) {
   document.getElementById('pFeaturesRu').value = item ? (item.features_ru || []).join('\n') : '';
   document.getElementById('pActionType').value = item ? item.actionType || 'purchase' : 'purchase';
   document.getElementById('pPopular').value = item ? String(item.popular || false) : 'false';
+  document.getElementById('pOrder').value = item ? parseOrder(item.order, 0) : programs.length + 1;
   openAdminModal('programModal');
 }
 
 function editProgram(id) {
   const item = programs.find(p => p._id === id);
   if (item) openProgramForm(item);
+}
+
+async function moveProgram(id, direction) {
+  await moveContentItem({
+    items: programs,
+    id,
+    direction,
+    endpointPrefix: '/api/admin/programs',
+    reload: loadPrograms,
+    entityName: 'program',
+    labelResolver: (item) => item.name || ''
+  });
 }
 
 async function saveProgram(e) {
@@ -699,7 +811,7 @@ async function saveProgram(e) {
     buttonText_ru: actionType === 'purchase' ? 'Начать' : 'Связаться',
     actionType,
     popular,
-    order: id ? (programs.find(p => p._id === id) || {}).order || 0 : programs.length + 1
+    order: parseInt(document.getElementById('pOrder').value, 10) || 0
   };
 
   try {
@@ -742,7 +854,7 @@ async function loadServices() {
     // Admin services route returns all (including unavailable)
     const res = await adminFetch('/api/admin/services', { headers: authHeaders() });
     if (res.ok) {
-      services = await res.json();
+      services = sortContentItems(await res.json(), (item) => item.title || '');
       renderServiceCards();
     }
   } catch (e) {
@@ -752,25 +864,36 @@ async function loadServices() {
 
 function renderServiceCards() {
   const el = document.getElementById('servicesList');
-  if (!services.length) {
+  const ordered = sortContentItems(services, (item) => item.title || '');
+  services = ordered;
+
+  if (!ordered.length) {
     el.innerHTML = `<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33"/></svg>
       <p>No services yet. Add your first one!</p>
     </div>`;
     return;
   }
-  el.innerHTML = services.map(s => `
+
+  el.innerHTML = ordered.map((s, index) => {
+    const orderValue = parseOrder(s.order, index + 1);
+    const priceText = s.price != null ? `${Number(s.price || 0).toLocaleString()} ${s.currency || 'KGS'}` : '';
+    const badgeText = `Order: ${orderValue} · ${s.currency || 'KGS'} · ${s.availability !== false ? 'Available' : 'Unavailable'}`;
+    return `
     <div class="admin-card">
-      <div class="card-badge">${esc(s.currency || 'KGS')} | ${s.availability !== false ? 'Available' : 'Unavailable'}</div>
-      <h3>${esc(s.title)}</h3>
-      <p>${esc(s.description || '')}</p>
-      <div class="card-meta">${s.price != null ? s.price.toLocaleString() + ' ' + (s.currency || 'KGS') : ''}${s.duration ? ' | ' + esc(s.duration) : ''}</div>
+      <div class="card-badge">${esc(badgeText)}</div>
+      <h3 title="${esc(s.title || '')}">${esc(truncateText(s.title, 110))}</h3>
+      <p title="${esc(s.description || '')}">${esc(truncateText(s.description, 200))}</p>
+      <div class="card-meta">${esc(priceText)}${s.duration ? ' · ' + esc(truncateText(s.duration, 80)) : ''}</div>
       <div class="card-actions">
+        <button class="btn btn-secondary btn-sm" onclick="moveService('${s._id}', -1)" ${index === 0 ? 'disabled' : ''} title="Move up">↑</button>
+        <button class="btn btn-secondary btn-sm" onclick="moveService('${s._id}', 1)" ${index === ordered.length - 1 ? 'disabled' : ''} title="Move down">↓</button>
         <button class="btn btn-secondary btn-sm" onclick="editService('${s._id}')">Edit</button>
         <button class="btn btn-danger btn-sm" onclick="deleteService('${s._id}')">Delete</button>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function openServiceForm(item) {
@@ -782,12 +905,25 @@ function openServiceForm(item) {
   document.getElementById('sCurrency').value = item ? item.currency || 'KGS' : 'KGS';
   document.getElementById('sDuration').value = item ? item.duration || '' : '';
   document.getElementById('sAvailability').value = item ? String(item.availability !== false) : 'true';
+  document.getElementById('sOrder').value = item ? parseOrder(item.order, 0) : services.length + 1;
   openAdminModal('serviceModal');
 }
 
 function editService(id) {
   const item = services.find(s => s._id === id);
   if (item) openServiceForm(item);
+}
+
+async function moveService(id, direction) {
+  await moveContentItem({
+    items: services,
+    id,
+    direction,
+    endpointPrefix: '/api/admin/services',
+    reload: loadServices,
+    entityName: 'service',
+    labelResolver: (item) => item.title || ''
+  });
 }
 
 async function saveService(e) {
@@ -799,11 +935,12 @@ async function saveService(e) {
     price: parseFloat(document.getElementById('sPrice').value) || 0,
     currency: document.getElementById('sCurrency').value,
     duration: document.getElementById('sDuration').value,
-    availability: document.getElementById('sAvailability').value === 'true'
+    availability: document.getElementById('sAvailability').value === 'true',
+    order: parseInt(document.getElementById('sOrder').value, 10) || 0
   };
 
   try {
-    const url = id ? '/api/services/' + id : '/api/services';
+    const url = id ? '/api/admin/services/' + id : '/api/admin/services';
     const method = id ? 'PUT' : 'POST';
     const res = await adminFetch(url, { method, headers: authHeaders(), body: JSON.stringify(data) });
     if (res.ok) {
@@ -822,7 +959,7 @@ async function saveService(e) {
 async function deleteService(id) {
   if (!confirm('Delete this service?')) return;
   try {
-    const res = await adminFetch('/api/services/' + id, { method: 'DELETE', headers: authHeaders() });
+    const res = await adminFetch('/api/admin/services/' + id, { method: 'DELETE', headers: authHeaders() });
     if (res.ok) {
       showToast('Service deleted', 'success');
       loadServices();

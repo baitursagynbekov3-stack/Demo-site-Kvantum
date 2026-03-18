@@ -1544,7 +1544,16 @@ function renderTestimonials(items) {
   const grid = document.querySelector('.testimonials-grid');
   if (!grid || !items.length) return;
   const lang = currentLang;
-  grid.innerHTML = items.map(t => {
+  const ordered = [...items].sort((a, b) => {
+    const aOrder = Number.parseInt(a && a.order, 10);
+    const bOrder = Number.parseInt(b && b.order, 10);
+    const safeA = Number.isFinite(aOrder) ? aOrder : Number.MAX_SAFE_INTEGER;
+    const safeB = Number.isFinite(bOrder) ? bOrder : Number.MAX_SAFE_INTEGER;
+    if (safeA !== safeB) return safeA - safeB;
+    return String((a && a.authorName) || '').localeCompare(String((b && b.authorName) || ''));
+  });
+
+  grid.innerHTML = ordered.map(t => {
     const text = lang === 'ru' && t.text_ru ? t.text_ru : t.text;
     const role = lang === 'ru' && t.role_ru ? t.role_ru : t.role;
     const initial = t.authorInitial || (t.authorName || '?').charAt(0);
@@ -1566,14 +1575,25 @@ function renderPrograms(items) {
   const grid = document.querySelector('.pricing-grid');
   if (!grid || !items.length) return;
   const lang = currentLang;
-  grid.innerHTML = items.map(p => {
+  const ordered = [...items].sort((a, b) => {
+    const aOrder = Number.parseInt(a && a.order, 10);
+    const bOrder = Number.parseInt(b && b.order, 10);
+    const safeA = Number.isFinite(aOrder) ? aOrder : Number.MAX_SAFE_INTEGER;
+    const safeB = Number.isFinite(bOrder) ? bOrder : Number.MAX_SAFE_INTEGER;
+    if (safeA !== safeB) return safeA - safeB;
+    return String((a && a.name) || '').localeCompare(String((b && b.name) || ''));
+  });
+
+  grid.innerHTML = ordered.map(p => {
     const name = lang === 'ru' && p.name_ru ? p.name_ru : p.name;
     const tagline = lang === 'ru' && p.tagline_ru ? p.tagline_ru : p.tagline;
     const tierLabel = lang === 'ru' && p.tierLabel_ru ? p.tierLabel_ru : p.tierLabel;
     const priceCurrency = lang === 'ru' && p.priceCurrency_ru ? p.priceCurrency_ru : p.priceCurrency;
     const priceAmount = lang === 'ru' && p.priceAmount_ru ? p.priceAmount_ru : p.priceAmount;
     const btnText = lang === 'ru' && p.buttonText_ru ? p.buttonText_ru : p.buttonText;
-    const features = lang === 'ru' && p.features_ru && p.features_ru.length ? p.features_ru : (p.features || []);
+    const allFeatures = lang === 'ru' && p.features_ru && p.features_ru.length ? p.features_ru : (p.features || []);
+    const visibleFeatures = allFeatures.slice(0, 8);
+    const hiddenFeatureCount = Math.max(0, allFeatures.length - visibleFeatures.length);
     const cssClass = p.cssClass || '';
     const popularBadge = p.popular ? `<div class="pricing-popular-badge">${lang === 'ru' ? tierLabel : tierLabel}</div>` : '';
     const tierBadge = !p.popular && tierLabel ? `<div class="pricing-tier">${escapeHtml(tierLabel)}</div>` : '';
@@ -1594,7 +1614,8 @@ function renderPrograms(items) {
         <span class="price-currency">${escapeHtml(priceCurrency)}</span>
       </div>
       <ul class="pricing-features">
-        ${features.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+        ${visibleFeatures.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}
+        ${hiddenFeatureCount > 0 ? `<li>${hiddenFeatureCount} ${lang === 'ru' ? 'доп. пунктов' : 'more items'}</li>` : ''}
       </ul>
       ${btnHtml}
     </div>`;

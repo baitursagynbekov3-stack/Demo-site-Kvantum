@@ -915,6 +915,7 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
   grid-column: span 2;
 }
 .pricing-card:hover {
@@ -969,16 +970,24 @@ input:focus, select:focus, textarea:focus {
   font-size: 1.4rem;
   margin-bottom: 4px;
   font-weight: 800;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pricing-tagline {
   color: var(--gray-500);
   font-size: 0.85rem;
   margin-bottom: 24px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pricing-price {
   margin-bottom: 28px;
   padding-bottom: 28px;
   border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
 }
 .pricing-card.premium .pricing-price,
 .pricing-card.mentorship .pricing-price { border-bottom-color: rgba(255,255,255,0.08); }
@@ -987,13 +996,17 @@ input:focus, select:focus, textarea:focus {
   font-weight: 800;
   color: var(--dark);
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pricing-card.premium .price-amount,
 .pricing-card.mentorship .price-amount { color: var(--accent); }
 .price-currency {
   font-size: 0.9rem;
   color: var(--gray-500);
-  margin-left: 4px;
+  margin-left: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pricing-features { margin-bottom: 28px; }
 .pricing-features li {
@@ -1002,6 +1015,8 @@ input:focus, select:focus, textarea:focus {
   position: relative;
   font-size: 0.9rem;
   color: var(--gray-700);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .pricing-features li::before {
   content: '\2713';
@@ -1038,6 +1053,7 @@ input:focus, select:focus, textarea:focus {
   border: 1px solid #f0f0f0;
   transition: var(--transition);
   position: relative;
+  min-width: 0;
 }
 .testimonial-card:hover {
   transform: translateY(-4px);
@@ -1058,8 +1074,10 @@ input:focus, select:focus, textarea:focus {
   line-height: 1.8;
   margin-bottom: 24px;
   font-style: italic;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-.testimonial-author { display: flex; align-items: center; gap: 14px; }
+.testimonial-author { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .author-avatar {
   width: 44px;
   height: 44px;
@@ -1072,8 +1090,20 @@ input:focus, select:focus, textarea:focus {
   font-size: 1rem;
   color: var(--white);
 }
-.author-info strong { display: block; font-size: 0.9rem; font-weight: 700; }
-.author-info span { font-size: 0.8rem; color: var(--gray-500); }
+.author-info { min-width: 0; }
+.author-info strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.author-info span {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 
 /* ===== Video Reviews ===== */
 .video-reviews-wrap {
