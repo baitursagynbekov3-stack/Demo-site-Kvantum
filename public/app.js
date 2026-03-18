@@ -2,7 +2,7 @@
 let currentUser = null;
 let authToken = null;
 let currentPayment = null;
-let currentLang = localStorage.getItem('quantum_lang') || 'en';
+let currentLang = localStorage.getItem('quantum_lang') === 'en' ? 'en' : 'ru';
 let adminOverviewData = null;
 let adminFilters = {
   search: '',
@@ -976,7 +976,38 @@ function storeOriginals() {
   });
 }
 
+function isAdminForLanguageSwitch() {
+  return Boolean(currentUser && normalizeAdminValue(currentUser.role) === 'admin');
+}
+
+function enforceLanguagePolicy() {
+  const langToggle = document.getElementById('langToggle');
+  const isAdmin = isAdminForLanguageSwitch();
+
+  if (langToggle) {
+    langToggle.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
+
+  if (isAdmin) {
+    currentLang = localStorage.getItem('quantum_lang') === 'en' ? 'en' : 'ru';
+  } else {
+    currentLang = 'ru';
+    localStorage.setItem('quantum_lang', 'ru');
+  }
+
+  applyTranslations(currentLang);
+  updateLangButton();
+
+  if (cachedTestimonials) renderTestimonials(cachedTestimonials);
+  if (cachedPrograms) renderPrograms(cachedPrograms);
+}
+
 function toggleLanguage() {
+  if (!isAdminForLanguageSwitch()) {
+    enforceLanguagePolicy();
+    return;
+  }
+
   currentLang = currentLang === 'en' ? 'ru' : 'en';
   localStorage.setItem('quantum_lang', currentLang);
   applyTranslations(currentLang);
@@ -1097,8 +1128,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initScrollAnimations();
   initCounterAnimations();
   checkAuth();
-  updateLangButton();
-  if (currentLang !== 'en') applyTranslations(currentLang);
+  enforceLanguagePolicy();
   loadSiteContent();
   initTurnstileWidgets();
 
@@ -1250,6 +1280,8 @@ function updateUIForLoggedIn() {
     const adminDashboardLink = document.getElementById('adminDashboardLink');
     if (adminDashboardLink) adminDashboardLink.style.display = 'none';
   }
+
+  enforceLanguagePolicy();
 }
 
 function toggleUserMenu() {
