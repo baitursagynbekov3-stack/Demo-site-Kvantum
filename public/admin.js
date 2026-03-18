@@ -13,6 +13,7 @@ try {
 
 let leads = [];
 let chats = [];
+let payments = [];
 let activeChat = null;
 
 let leadFilters = {
@@ -25,11 +26,18 @@ let chatFilters = {
   status: 'all'
 };
 
+let paymentFilters = {
+  search: '',
+  status: 'all'
+};
+
 let leadSearchTimer = null;
 let chatSearchTimer = null;
+let paymentSearchTimer = null;
 
 const BOOKING_STATUSES = ['pending', 'new', 'in_progress', 'done', 'cancelled'];
 const CHAT_STATUSES = ['open', 'collecting', 'booked', 'closed', 'spam'];
+const PAYMENT_STATUSES = ['completed', 'pending', 'failed', 'refunded', 'cancelled'];
 
 // ===== API helpers (reused from app.js pattern) =====
 function buildApiUrl(path) {
@@ -91,6 +99,47 @@ function demoAdminApi(path, options) {
     const role = getDemoUserRole();
     if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
     return createApiResponse(200, { isAdmin: true });
+  }
+
+  if (path.startsWith('/api/admin/overview') && method === 'GET') {
+    const role = getDemoUserRole();
+    if (role !== 'admin') return createApiResponse(403, { error: 'Admin access required' });
+
+    const users = getStorageArray('quantum_demo_users')
+      .map((user) => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone || '',
+        role: user.role || 'user',
+        createdAt: user.createdAt || new Date().toISOString()
+      }))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const bookings = getStorageArray('quantum_demo_bookings')
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const payments = getStorageArray('quantum_demo_payments')
+      .map((payment) => {
+        const user = users.find((item) => Number(item.id) === Number(payment.userId));
+        return {
+          ...payment,
+          user: user ? { id: user.id, name: user.name, email: user.email } : null
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return createApiResponse(200, {
+      totals: {
+        users: users.length,
+        bookings: bookings.length,
+        payments: payments.length
+      },
+      users: users.slice(0, 500),
+      bookings: bookings.slice(0, 500),
+      payments: payments.slice(0, 500)
+    });
   }
 
   // Match /api/admin/{type} or /api/admin/{type}/{id}
@@ -331,10 +380,18 @@ let currentSection = 'testimonials';
 function switchSection(section, e) {
   if (e) e.preventDefault();
   currentSection = section;
-  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-  document.querySelector(`[data-section="${section}"]`).classList.add('active');
-  document.querySelectorAll('[id^="section-"]').forEach(el => el.style.display = 'none');
-  document.getElementById('section-' + section).style.display = 'block';
+
+  document.querySelectorAll('.sidebar-nav a').forEach((a) => a.classList.remove('active'));
+  const activeLink = document.querySelector(`[data-section="${section}"]`);
+  if (activeLink) activeLink.classList.add('active');
+
+  document.querySelectorAll('[id^="section-"]').forEach((el) => { el.style.display = 'none'; });
+  const sectionEl = document.getElementById('section-' + section);
+  if (sectionEl) sectionEl.style.display = 'block';
+
+  if (section === 'payments' && !payments.length) {
+    loadPayments(false);
+  }
 }
 
 // ===== Modals =====
@@ -1017,6 +1074,131 @@ async function saveActiveChatStatus() {
   }
 }
 
+
+// ================================================================
+// PAYMENTS
+// ================================================================
+async function loadPayments(force) {
+  try {
+    const res = await adminFetch('/api/admin/overview?limit=500', { headers: authHeaders() });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.error || 'Failed to load payments', 'error');
+      return;
+    }
+
+    payments = Array.isArray(data.payments) ? data.payments : [];
+    renderPaymentStatusOptions();
+    renderPayments();
+
+    if (force) showToast('Payments refreshed', 'info');
+  } catch (e) {
+    showToast('Failed to load payments', 'error');
+  }
+}
+
+function renderPaymentStatusOptions() {
+  const select = document.getElementById('paymentStatusFilter');
+  if (!select) return;
+
+  const discoveredStatuses = Array.from(new Set(
+    payments
+      .map((payment) => String(payment.status || 'completed').trim().toLowerCase())
+      .filter(Boolean)
+  ));
+
+  const ordered = [
+    ...PAYMENT_STATUSES.filter((status) => discoveredStatuses.includes(status)),
+    ...discoveredStatuses.filter((status) => !PAYMENT_STATUSES.includes(status))
+  ];
+
+  const optionsHtml = ['<option value="all">All statuses</option>']
+    .concat(ordered.map((status) => `<option value="${esc(status)}">${esc(status)}</option>`))
+    .join('');
+
+  select.innerHTML = optionsHtml;
+
+  if (!ordered.includes(paymentFilters.status)) {
+    paymentFilters.status = 'all';
+  }
+  select.value = paymentFilters.status;
+}
+
+function onPaymentFiltersChanged() {
+  const searchInput = document.getElementById('paymentSearchInput');
+  const statusSelect = document.getElementById('paymentStatusFilter');
+
+  paymentFilters.search = searchInput ? searchInput.value.trim() : '';
+  paymentFilters.status = statusSelect ? statusSelect.value : 'all';
+
+  clearTimeout(paymentSearchTimer);
+  paymentSearchTimer = setTimeout(() => renderPayments(), 150);
+}
+
+function formatMoney(amount, currency) {
+  const value = Number(amount);
+  const normalizedCurrency = String(currency || '').trim().toUpperCase();
+
+  if (!Number.isFinite(value)) {
+    return `${String(amount || '-')}${normalizedCurrency ? ' ' + normalizedCurrency : ''}`.trim();
+  }
+
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}${normalizedCurrency ? ' ' + normalizedCurrency : ''}`;
+}
+
+function renderPayments() {
+  const root = document.getElementById('paymentsList');
+  if (!root) return;
+
+  const search = paymentFilters.search.toLowerCase();
+  const status = String(paymentFilters.status || 'all').toLowerCase();
+
+  const filtered = payments.filter((payment) => {
+    const paymentStatus = String(payment.status || '').toLowerCase();
+    if (status !== 'all' && paymentStatus !== status) return false;
+
+    if (!search) return true;
+
+    const haystack = [
+      payment.id,
+      payment.productName,
+      payment.productId,
+      payment.currency,
+      payment.status,
+      payment.user && payment.user.name,
+      payment.user && payment.user.email
+    ]
+      .map((value) => String(value || '').toLowerCase())
+      .join(' ');
+
+    return haystack.includes(search);
+  });
+
+  if (!filtered.length) {
+    root.innerHTML = '<div class="empty-state"><p>No payments found for current filters.</p></div>';
+    return;
+  }
+
+  root.innerHTML = filtered.map((payment) => {
+    const clientName = payment.user && payment.user.name ? payment.user.name : '-';
+    const clientEmail = payment.user && payment.user.email ? payment.user.email : '-';
+
+    return `
+      <div class="admin-list-item">
+        <div class="admin-list-head">
+          <strong>${esc(payment.productName || payment.productId || payment.id || 'Payment')}</strong>
+          ${statusPill(payment.status || 'completed')}
+        </div>
+        <div class="admin-meta">ID: ${esc(payment.id || '-')}
+Client: ${esc(clientName)} (${esc(clientEmail)})
+Amount: ${esc(formatMoney(payment.amount, payment.currency))}
+Date: ${esc(formatDateTime(payment.createdAt))}</div>
+      </div>
+    `;
+  }).join('');
+}
+
 // ================================================================
 // CHATBOT KNOWLEDGE BASE
 // ================================================================
@@ -1098,8 +1280,10 @@ async function initAdmin() {
   // Initialize filter UI state
   const leadStatusSelect = document.getElementById('leadStatusFilter');
   const chatStatusSelect = document.getElementById('chatStatusFilter');
+  const paymentStatusSelect = document.getElementById('paymentStatusFilter');
   if (leadStatusSelect) leadStatusSelect.value = leadFilters.status;
   if (chatStatusSelect) chatStatusSelect.value = chatFilters.status;
+  if (paymentStatusSelect) paymentStatusSelect.value = paymentFilters.status;
 
   // Load all data
   loadTestimonials();
@@ -1107,6 +1291,7 @@ async function initAdmin() {
   loadServices();
   loadLeads(false);
   loadChats(false);
+  loadPayments(false);
   loadChatbotKnowledge(false);
 }
 

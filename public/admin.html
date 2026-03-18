@@ -15,12 +15,12 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    body { margin: 0; font-family: 'Inter', sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+    body { margin: 0; font-family: 'Inter', sans-serif; background: #0d1117; color: #e7e9ef; min-height: 100vh; }
 
     /* Layout */
     .admin-layout { display: flex; min-height: 100vh; }
     .admin-sidebar {
-      width: 240px; background: #111; border-right: 1px solid rgba(255,255,255,0.06);
+      width: 236px; background: #121826; border-right: 1px solid rgba(255,255,255,0.08);
       padding: 24px 0; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10;
       display: flex; flex-direction: column;
     }
@@ -35,28 +35,28 @@
       text-decoration: none; font-size: 14px; font-weight: 500; transition: all 0.2s;
       border-left: 3px solid transparent;
     }
-    .sidebar-nav a:hover { color: #e0e0e0; background: rgba(255,255,255,0.03); }
-    .sidebar-nav a.active { color: #a78bfa; background: rgba(167,139,250,0.06); border-left-color: #a78bfa; }
+    .sidebar-nav a:hover { color: #e7e9ef; background: rgba(255,255,255,0.04); }
+    .sidebar-nav a.active { color: #d5c8ff; background: rgba(167,139,250,0.12); border-left-color: #a78bfa; }
     .sidebar-nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
 
     .sidebar-bottom { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.06); }
     .sidebar-bottom a { display: block; color: #666; text-decoration: none; font-size: 13px; padding: 6px 0; }
     .sidebar-bottom a:hover { color: #e0e0e0; }
 
-    .admin-main { margin-left: 240px; flex: 1; padding: 32px; min-height: 100vh; }
+    .admin-main { margin-left: 236px; flex: 1; padding: 28px; min-height: 100vh; }
 
     /* Header */
-    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
+    .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; }
     .admin-header h1 { font-size: 24px; font-weight: 700; color: #fff; margin: 0; }
     .admin-header .btn { padding: 10px 20px; }
 
     /* Cards */
     .admin-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
     .admin-card {
-      background: #1a1a1a; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
+      background: #151b27; border: 1px solid rgba(255,255,255,0.1); border-radius: 14px;
       padding: 20px; position: relative; transition: border-color 0.2s;
     }
-    .admin-card:hover { border-color: rgba(167,139,250,0.3); }
+    .admin-card:hover { border-color: rgba(167,139,250,0.4); }
     .admin-card h3 { margin: 0 0 8px; font-size: 16px; color: #fff; }
     .admin-card p { margin: 0 0 12px; font-size: 13px; color: #888; line-height: 1.5; }
     .admin-card .card-meta { font-size: 12px; color: #666; margin-bottom: 12px; }
@@ -68,8 +68,8 @@
     .btn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 8px; font-family: inherit; font-weight: 600; cursor: pointer; transition: all 0.2s; }
     .btn-primary { background: linear-gradient(135deg, #a78bfa, #7c3aed); color: #fff; }
     .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-    .btn-secondary { background: #222; color: #ccc; border: 1px solid rgba(255,255,255,0.08); }
-    .btn-secondary:hover { background: #2a2a2a; color: #fff; }
+    .btn-secondary { background: #1a2231; color: #d4dae6; border: 1px solid rgba(255,255,255,0.12); }
+    .btn-secondary:hover { background: #242f45; color: #fff; }
     .btn-danger { background: rgba(239,68,68,0.12); color: #ef4444; }
     .btn-danger:hover { background: rgba(239,68,68,0.2); }
     .btn-sm { padding: 6px 14px; font-size: 12px; }
@@ -139,9 +139,9 @@
 
     /* Data panels */
     .admin-panel {
-      background: #151515;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 12px;
+      background: #151b27;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
       padding: 16px;
     }
     .admin-toolbar {
@@ -154,7 +154,7 @@
     .admin-toolbar input,
     .admin-toolbar select {
       min-width: 180px;
-      background: #0f0f0f;
+      background: #0f1521;
       border: 1px solid rgba(255,255,255,0.12);
       color: #e0e0e0;
       border-radius: 8px;
@@ -166,10 +166,10 @@
       gap: 10px;
     }
     .admin-list-item {
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
       padding: 12px;
-      background: #111;
+      background: #101622;
     }
     .admin-list-head {
       display: flex;
@@ -271,7 +271,7 @@
       .admin-sidebar .logo-text, .admin-sidebar .badge, .sidebar-nav a span, .sidebar-bottom { display: none; }
       .admin-sidebar .logo { padding: 0 12px 16px; }
       .sidebar-nav a { padding: 12px; justify-content: center; }
-      .admin-main { margin-left: 60px; padding: 20px; }
+      .admin-main { margin-left: 60px; padding: 18px; }
       .admin-cards { grid-template-columns: 1fr; }
       .form-row { grid-template-columns: 1fr; }
     }
@@ -319,6 +319,10 @@
           <a href="#" data-section="chats" onclick="switchSection('chats', event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6l-4 4v-4H5a2 2 0 0 1-2-2z"/></svg>
             <span>Chats</span>
+          </a>
+          <a href="#" data-section="payments" onclick="switchSection('payments', event)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><path d="M7 15h4"/></svg>
+            <span>Payments</span>
           </a>
           <a href="#" data-section="chatbot-kb" onclick="switchSection('chatbot-kb', event)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -399,6 +403,28 @@
               </select>
             </div>
             <div id="chatsList" class="admin-list"></div>
+          </div>
+        </div>
+
+        <!-- Payments Section -->
+        <div id="section-payments" style="display:none">
+          <div class="admin-header">
+            <h1>Payments</h1>
+            <button class="btn btn-secondary" onclick="loadPayments(true)">Refresh</button>
+          </div>
+          <div class="admin-panel">
+            <div class="admin-toolbar">
+              <input type="search" id="paymentSearchInput" placeholder="Search by ID/client/product" oninput="onPaymentFiltersChanged()">
+              <select id="paymentStatusFilter" onchange="onPaymentFiltersChanged()">
+                <option value="all">All statuses</option>
+                <option value="completed">completed</option>
+                <option value="pending">pending</option>
+                <option value="failed">failed</option>
+                <option value="refunded">refunded</option>
+                <option value="cancelled">cancelled</option>
+              </select>
+            </div>
+            <div id="paymentsList" class="admin-list"></div>
           </div>
         </div>
 
