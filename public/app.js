@@ -2175,9 +2175,38 @@ async function openAdminDashboard() {
 }
 
 // ===== Modals =====
+const MODAL_CLOSE_DURATION_MS = 320;
+
+function hasOpenModalOverlay() {
+  return !!document.querySelector('.modal-overlay.active:not(.is-closing)');
+}
+
+function isVideoReviewOpen() {
+  const videoModal = document.getElementById('videoReviewModal');
+  return !!(videoModal && videoModal.classList.contains('is-open'));
+}
+
+function syncBodyScrollLock() {
+  if (hasOpenModalOverlay() || isVideoReviewOpen()) {
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.body.style.overflow = '';
+  }
+}
+
 function openModal(id) {
-  document.getElementById(id).classList.add('active');
-  document.body.style.overflow = 'hidden';
+  const overlay = document.getElementById(id);
+  if (!overlay) return;
+
+  const existingTimer = Number(overlay.dataset.closeTimer || 0);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    overlay.dataset.closeTimer = '';
+  }
+
+  overlay.classList.remove('is-closing');
+  overlay.classList.add('active');
+  syncBodyScrollLock();
 
   if (id === 'consultModal' && currentUser) {
     const form = document.getElementById('consultForm');
@@ -2209,8 +2238,27 @@ function openModal(id) {
 }
 
 function closeModal(id) {
-  document.getElementById(id).classList.remove('active');
-  document.body.style.overflow = '';
+  const overlay = document.getElementById(id);
+  if (!overlay || !overlay.classList.contains('active')) {
+    syncBodyScrollLock();
+    return;
+  }
+
+  if (prefersReducedMotion()) {
+    overlay.classList.remove('active', 'is-closing');
+    syncBodyScrollLock();
+    return;
+  }
+
+  overlay.classList.add('is-closing');
+
+  const timerId = setTimeout(() => {
+    overlay.classList.remove('active', 'is-closing');
+    overlay.dataset.closeTimer = '';
+    syncBodyScrollLock();
+  }, MODAL_CLOSE_DURATION_MS);
+
+  overlay.dataset.closeTimer = String(timerId);
 }
 
 function switchTab(tab) {
@@ -2239,8 +2287,15 @@ document.addEventListener('mousedown', (e) => {
 document.addEventListener('click', (e) => {
   const overlay = e.target.closest('.modal-overlay');
   if (overlay && !e.target.closest('.modal') && !_mouseDownInsideModal) {
-    overlay.classList.remove('active');
-    document.body.style.overflow = '';
+    closeModal(overlay.id);
+  }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+
+  const activeOverlay = document.querySelector('.modal-overlay.active:not(.is-closing)');
+  if (activeOverlay && activeOverlay.id) {
+    closeModal(activeOverlay.id);
   }
 });
 
