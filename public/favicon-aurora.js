@@ -1,65 +1,100 @@
 (function () {
   const SIZE = 64;
+  const CX = SIZE / 2;
+  const CY = SIZE / 2;
+  const MAX_R = SIZE * 0.58;
+
   const canvas = document.createElement('canvas');
   canvas.width = SIZE;
   canvas.height = SIZE;
   const ctx = canvas.getContext('2d');
 
-  let frame = 0;
-
-  // Aurora bands: deep reds, golds, with black base
-  const bands = [
-    { y: 0.18, thickness: 0.22, freq: 1.8, speed: 0.55, r: 180, g: 8,   b: 8   },
-    { y: 0.35, thickness: 0.18, freq: 2.2, speed: 0.40, r: 212, g: 175, b: 55  },
-    { y: 0.50, thickness: 0.20, freq: 1.5, speed: 0.70, r: 160, g: 0,   b: 0   },
-    { y: 0.65, thickness: 0.16, freq: 2.6, speed: 0.50, r: 255, g: 200, b: 40  },
-    { y: 0.80, thickness: 0.14, freq: 1.9, speed: 0.65, r: 100, g: 0,   b: 0   },
+  // 7 rings staggered evenly so motion is always visible
+  const RING_COUNT = 7;
+  const colors = [
+    [204, 0,   0  ],  // deep red
+    [212, 175, 55 ],  // gold
+    [139, 0,   0  ],  // dark red
+    [255, 215, 0  ],  // bright gold
+    [180, 20,  20 ],  // mid red
+    [230, 190, 40 ],  // warm gold
   ];
 
-  function render() {
-    ctx.clearRect(0, 0, SIZE, SIZE);
+  const rings = Array.from({ length: RING_COUNT }, (_, i) => ({
+    r: (MAX_R / RING_COUNT) * i,
+    colorIndex: i % colors.length,
+    phase: (Math.PI * 2 * i) / RING_COUNT, // wobble phase offset per ring
+  }));
 
-    // Deep black background with slight red glow at center
-    const bg = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 2, SIZE / 2, SIZE / 2, SIZE * 0.75);
-    bg.addColorStop(0, '#1c0303');
-    bg.addColorStop(1, '#000000');
+  const SPEED = 0.55;   // expansion speed px/frame
+  const WOBBLE = 2.2;   // how much each ring wiggles
+
+  function drawWobblyRing(ring, t) {
+    const progress = ring.r / MAX_R;
+    const alpha = Math.pow(1 - progress, 1.4) * 0.92;
+    if (alpha < 0.02) return;
+
+    const lineWidth = Math.max(1.2, 3.5 * (1 - progress * 0.6));
+    const [r, g, b] = colors[ring.colorIndex];
+
+    ctx.beginPath();
+    const STEPS = 72;
+    for (let i = 0; i <= STEPS; i++) {
+      const angle = (i / STEPS) * Math.PI * 2;
+      // Two overlapping sine waves for organic ripple wobble
+      const w =
+        Math.sin(angle * 5 + ring.phase + t * 2.1) * WOBBLE * (1 - progress * 0.5) +
+        Math.sin(angle * 3 - ring.phase - t * 1.4) * WOBBLE * 0.5 * (1 - progress * 0.5);
+      const rr = ring.r + w;
+      const x = CX + Math.cos(angle) * rr;
+      const y = CY + Math.sin(angle) * rr;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+    ctx.lineWidth = lineWidth;
+    ctx.stroke();
+  }
+
+  function render(ts) {
+    const t = ts / 1000;
+
+    // Deep black background
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, SIZE, SIZE);
+
+    // Subtle dark red radial glow at center
+    const bg = ctx.createRadialGradient(CX, CY, 0, CX, CY, MAX_R);
+    bg.addColorStop(0,   'rgba(100,0,0,0.5)');
+    bg.addColorStop(0.4, 'rgba(40,0,0,0.2)');
+    bg.addColorStop(1,   'rgba(0,0,0,0)');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, SIZE, SIZE);
 
-    const t = frame / 60;
-
-    bands.forEach((b) => {
-      const cy = b.y * SIZE;
-      const half = (b.thickness * SIZE) / 2;
-
-      // Build ribbon path: top edge forward, bottom edge backward
-      ctx.beginPath();
-      for (let x = 0; x <= SIZE; x++) {
-        const noise =
-          Math.sin((x / SIZE) * Math.PI * 3 * b.freq + t * b.speed * 2.5) * half * 0.55 +
-          Math.sin((x / SIZE) * Math.PI * 5 * b.freq + t * b.speed * 1.4 + 1.2) * half * 0.25;
-        const y = cy - half + noise;
-        x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    // Expand rings and recycle
+    rings.forEach((ring) => {
+      ring.r += SPEED;
+      if (ring.r > MAX_R) {
+        ring.r = 0;
+        ring.colorIndex = (ring.colorIndex + 1) % colors.length;
+        ring.phase = Math.random() * Math.PI * 2;
       }
-      for (let x = SIZE; x >= 0; x--) {
-        const noise =
-          Math.sin((x / SIZE) * Math.PI * 3 * b.freq + t * b.speed * 2.5 + 0.6) * half * 0.55 +
-          Math.sin((x / SIZE) * Math.PI * 5 * b.freq + t * b.speed * 1.4 + 2.0) * half * 0.25;
-        const y = cy + half + noise;
-        ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-
-      const grad = ctx.createLinearGradient(0, cy - half, 0, cy + half);
-      grad.addColorStop(0,   `rgba(${b.r},${b.g},${b.b},0)`);
-      grad.addColorStop(0.35, `rgba(${b.r},${b.g},${b.b},0.72)`);
-      grad.addColorStop(0.65, `rgba(${b.r},${b.g},${b.b},0.72)`);
-      grad.addColorStop(1,   `rgba(${b.r},${b.g},${b.b},0)`);
-      ctx.fillStyle = grad;
-      ctx.fill();
+      drawWobblyRing(ring, t);
     });
 
-    // Swap favicon
+    // Pulsing center orb — gold core, red halo
+    const pulse = 0.7 + 0.3 * Math.sin(t * 4);
+    const orb = ctx.createRadialGradient(CX, CY, 0, CX, CY, 7 * pulse);
+    orb.addColorStop(0,   `rgba(255,230,80,${0.95 * pulse})`);
+    orb.addColorStop(0.4, `rgba(212,175,55,${0.7 * pulse})`);
+    orb.addColorStop(0.75,`rgba(180,0,0,${0.4 * pulse})`);
+    orb.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(CX, CY, 7 * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = orb;
+    ctx.fill();
+
+    // Update favicon
     let link = document.querySelector("link[rel~='icon']");
     if (!link) {
       link = document.createElement('link');
@@ -68,9 +103,8 @@
     }
     link.href = canvas.toDataURL('image/png');
 
-    frame++;
     requestAnimationFrame(render);
   }
 
-  render();
+  requestAnimationFrame(render);
 })();
