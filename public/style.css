@@ -969,6 +969,9 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: repeat(3, 1fr);
   gap: 28px;
 }
+.testimonials-grid > .testimonial-card:nth-child(4):last-child {
+  grid-column: 2 / span 1;
+}
 .testimonial-card {
   background: var(--white);
   padding: 40px 32px;
