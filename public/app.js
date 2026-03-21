@@ -2265,6 +2265,7 @@ function checkAuth() {
 
 function updateUIForLoggedIn() {
   const loginBtn = document.getElementById('loginBtn');
+  const registerBtn = document.getElementById('registerBtn');
   const navCtaBtn = document.querySelector('.nav-cta');
   const userMenu = document.getElementById('userMenu');
   const userName = document.getElementById('userName');
@@ -2273,6 +2274,7 @@ function updateUIForLoggedIn() {
 
   if (currentUser) {
     if (loginBtn) loginBtn.style.display = 'none';
+    if (registerBtn) registerBtn.style.display = 'none';
     if (navCtaBtn) navCtaBtn.style.display = 'none';
     if (userMenu) userMenu.style.display = 'block';
     if (userName) userName.textContent = currentUser.name;
@@ -2283,6 +2285,7 @@ function updateUIForLoggedIn() {
     if (adminDashboardLink) adminDashboardLink.style.display = isAdmin ? 'block' : 'none';
   } else {
     if (loginBtn) loginBtn.style.display = '';
+    if (registerBtn) registerBtn.style.display = '';
     if (navCtaBtn) navCtaBtn.style.display = '';
     if (userMenu) userMenu.style.display = 'none';
     if (adminLink) adminLink.style.display = 'none';
