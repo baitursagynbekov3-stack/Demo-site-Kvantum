@@ -1318,6 +1318,13 @@ input[type="checkbox"]:focus {
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 22px 42px rgba(17, 17, 17, 0.12);
 }
+.program-detail-video-card.is-playable {
+  cursor: pointer;
+}
+.program-detail-video-card.is-playable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 28px 48px rgba(17, 17, 17, 0.16);
+}
 .program-detail-video-card.is-primary {
   min-height: 360px;
 }

@@ -960,9 +960,9 @@
     </div>
   </div>
 
-  <script src="./config.js?v=20260321-4"></script>
-  <script src="./program-defaults.js?v=20260321-4"></script>
-  <script src="./app.js?v=20260321-4"></script>
+  <script src="./config.js?v=20260321-6"></script>
+  <script src="./program-defaults.js?v=20260321-6"></script>
+  <script src="./app.js?v=20260321-6"></script>
 
   <script>
     // Video Reviews Modal
@@ -990,7 +990,11 @@
         modal.classList.remove('is-horizontal');
       } else if (type === 'local') {
         var posterAttr = poster ? ' poster="' + poster + '"' : '';
-        body.innerHTML = '<video controls autoplay playsinline' + posterAttr + ' style="width:100%;height:100%;display:block;object-fit:contain;background:#000"><source src="' + src + '" type="video/mp4"></video>';
+        var ext = (src.split('?')[0].split('.').pop() || '').toLowerCase();
+        var mime = 'video/mp4';
+        if (ext === 'mov') mime = 'video/quicktime';
+        else if (ext === 'webm') mime = 'video/webm';
+        body.innerHTML = '<video controls autoplay playsinline' + posterAttr + ' style="width:100%;height:100%;display:block;object-fit:contain;background:#000"><source src="' + src + '" type="' + mime + '"></video>';
         modal.classList.remove('is-horizontal');
       }
 

@@ -1888,9 +1888,14 @@ function buildProgramDetailsVideosHtml(videos, lang) {
     const title = video && typeof video === 'object' ? (video.title || '') : '';
     const subtitle = video && typeof video === 'object' ? (video.subtitle || '') : '';
     const poster = video && typeof video === 'object' ? (video.poster || '') : '';
+    const src = video && typeof video === 'object' ? (video.src || '') : '';
     const styleAttr = poster ? ` style="background-image: linear-gradient(180deg, rgba(11,12,16,0.08) 0%, rgba(11,12,16,0.72) 100%), url('${escapeHtml(poster)}');"` : '';
+    const videoAttrs = src
+      ? ` data-type="local" data-src="${escapeHtml(src)}" data-poster="${escapeHtml(poster)}" onclick="openVideoReview(this)"`
+      : '';
+    const interactiveClass = src ? ' is-playable' : '';
 
-    return `<article class="program-detail-video-card ${variant}"${styleAttr}>
+    return `<article class="program-detail-video-card ${variant}${interactiveClass}"${styleAttr}${videoAttrs}>
       <div class="program-detail-video-overlay">
         <span class="program-detail-video-pill">${lang === 'ru' ? 'Видео отзыв' : 'Video review'}</span>
         <div class="program-detail-video-play">

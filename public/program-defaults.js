@@ -53,18 +53,21 @@
         {
           title: 'Main transformation story',
           subtitle: 'Video review · Coming soon',
+          src: '/videos/brain-charge-main.mp4',
           poster: '/images/review-3-poster.jpg',
           isPrimary: true
         },
         {
           title: 'Daily practice result',
           subtitle: 'Video review · Coming soon',
+          src: '/videos/brain-charge-extra-1.mp4',
           poster: '',
           isPrimary: false
         },
         {
           title: 'Shift in state and focus',
           subtitle: 'Video review · Coming soon',
+          src: '/videos/brain-charge-extra-2.mov',
           poster: '',
           isPrimary: false
         }
@@ -73,18 +76,21 @@
         {
           title: 'Главная история трансформации',
           subtitle: 'Видео отзыв · скоро здесь',
+          src: '/videos/brain-charge-main.mp4',
           poster: '/images/review-3-poster.jpg',
           isPrimary: true
         },
         {
           title: 'Результат ежедневной практики',
           subtitle: 'Видео отзыв · скоро здесь',
+          src: '/videos/brain-charge-extra-1.mp4',
           poster: '',
           isPrimary: false
         },
         {
           title: 'Сдвиг в состоянии и фокусе',
           subtitle: 'Видео отзыв · скоро здесь',
+          src: '/videos/brain-charge-extra-2.mov',
           poster: '',
           isPrimary: false
         }
