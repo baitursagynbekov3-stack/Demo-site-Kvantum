@@ -191,6 +191,25 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
             status: 'completed'
           }
         });
+
+        // Notify n8n of new purchase for Telegram notification
+        if (process.env.N8N_PURCHASE_WEBHOOK_URL) {
+          fetch(process.env.N8N_PURCHASE_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerName: user.name,
+              customerEmail: user.email,
+              productName: productName || 'Unknown product',
+              productId: productId || null,
+              amount: Number.isFinite(normalizedOriginalAmount) && normalizedOriginalAmount > 0
+                ? normalizedOriginalAmount
+                : session.amount_total / 100,
+              currency: normalizedOriginalCurrency || session.currency.toUpperCase(),
+              timestamp: new Date().toISOString()
+            })
+          }).catch(err => console.error('[n8n purchase webhook] failed:', err.message));
+        }
       }
     } catch (err) {
       console.error('[stripe webhook] db error:', err.message);
@@ -204,6 +223,39 @@ app.use(express.json());
 if (SERVE_STATIC) {
   app.use(express.static(path.join(__dirname, 'public')));
 }
+
+// ===== Exchange Rates (display-only, cached 1 hour) =====
+const DISPLAY_CURRENCIES = ['KGS', 'USD', 'EUR', 'UAH', 'RUB'];
+let exchangeRateCache = { rates: null, fetchedAt: 0 };
+const EXCHANGE_RATE_TTL = 60 * 60 * 1000; // 1 hour
+
+async function fetchExchangeRates() {
+  const now = Date.now();
+  if (exchangeRateCache.rates && now - exchangeRateCache.fetchedAt < EXCHANGE_RATE_TTL) {
+    return exchangeRateCache.rates;
+  }
+  try {
+    const resp = await fetch('https://open.er-api.com/v6/latest/USD');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (data.result !== 'success' || !data.rates) throw new Error('Invalid response');
+    const rates = {};
+    for (const cur of DISPLAY_CURRENCIES) {
+      if (data.rates[cur]) rates[cur] = data.rates[cur];
+    }
+    exchangeRateCache = { rates, fetchedAt: now };
+    return rates;
+  } catch (err) {
+    console.error('[exchange-rates] fetch failed:', err.message);
+    return exchangeRateCache.rates || null;
+  }
+}
+
+app.get('/api/exchange-rates', async (req, res) => {
+  const rates = await fetchExchangeRates();
+  if (!rates) return res.status(503).json({ error: 'Exchange rates unavailable' });
+  res.json({ base: 'USD', currencies: DISPLAY_CURRENCIES, rates });
+});
 
 app.get('/api/health', async (req, res) => {
   try {

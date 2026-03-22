@@ -913,6 +913,28 @@ input[type="checkbox"]:focus {
 
 /* ===== Programs / Pricing ===== */
 .programs { background: var(--white); }
+.currency-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 0.95rem;
+}
+.currency-selector label { color: var(--text-secondary); }
+.currency-selector select {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.dark-mode .currency-selector select {
+  background: var(--card-bg, #1a1a2e);
+  color: var(--white);
+  border-color: var(--border);
+}
 .pricing-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -2530,6 +2552,7 @@ body.dark-mode .phone-input-group .country-code-select {
   }
   .hamburger { display: flex; }
   .nav-actions .btn.btn-outline { display: none; }
+  .nav-actions #registerBtn { display: none; }
   .nav-actions .btn.nav-cta { display: none; }
   .hero { padding: 120px 0 80px; }
   .hero-title { font-size: 2.2rem; }

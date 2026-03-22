@@ -1259,6 +1259,7 @@ const translations = {
     'programs.label': 'Наши программы',
     'programs.title': 'Выберите путь к <span class="text-gradient">трансформации</span>',
     'programs.subtitle': 'От начального уровня до элитного наставничества — найдите свою программу',
+    'programs.currency': 'Валюта:',
     'programs.bc.badge': 'Точка входа',
     'programs.bc.name': 'Зарядка мозга',
     'programs.bc.tagline': 'Перепрограммирование реальности',
@@ -1463,6 +1464,7 @@ const translations = {
     'programs.label': 'Our Programs',
     'programs.title': 'Choose Your Path to <span class="text-gradient">Transformation</span>',
     'programs.subtitle': 'From entry-level to elite mentorship — find the right program for you',
+    'programs.currency': 'Currency:',
     'testimonials.label': 'Testimonials',
     'testimonials.title': 'What Our Clients <span class="text-gradient">Say</span>',
     'testimonials.videoTitle': 'Video Reviews',
@@ -2060,7 +2062,110 @@ function renderPrograms(items) {
     </div>`;
   }).join('');
 
+  initializeProgramDetailCarousels();
+
+  // Re-apply currency conversion after re-render
+  if (typeof applyDisplayCurrency === 'function') applyDisplayCurrency();
 }
+
+// ===== Currency Display Conversion =====
+let exchangeRates = null;
+let selectedDisplayCurrency = '';
+
+async function loadExchangeRates() {
+  try {
+    const resp = await apiFetch('/api/exchange-rates');
+    if (!resp.ok) throw new Error('unavailable');
+    const data = await resp.json();
+    exchangeRates = data.rates;
+  } catch (err) {
+    exchangeRates = null;
+  }
+}
+
+function convertPrice(amount, fromCurrency, toCurrency) {
+  if (!exchangeRates || !amount || !fromCurrency || !toCurrency) return null;
+  const from = fromCurrency.toUpperCase();
+  const to = toCurrency.toUpperCase();
+  if (from === to) return amount;
+  const fromRate = exchangeRates[from];
+  const toRate = exchangeRates[to];
+  if (!fromRate || !toRate) return null;
+  // Convert: amount in fromCurrency → USD → toCurrency
+  return (amount / fromRate) * toRate;
+}
+
+function formatConvertedPrice(amount, currency) {
+  const symbols = { USD: '$', EUR: '€', UAH: '₴', RUB: '₽', KGS: '' };
+  const sym = symbols[currency] || '';
+  const rounded = Math.round(amount);
+  const formatted = rounded.toLocaleString();
+  if (sym === '$' || sym === '€') return sym + formatted;
+  return formatted;
+}
+
+function getCurrencySuffix(currency) {
+  const suffixes = { KGS: 'KGS', RUB: '₽', UAH: '₴', USD: '', EUR: '' };
+  return suffixes[currency] != null ? suffixes[currency] : currency;
+}
+
+function applyDisplayCurrency() {
+  const cards = document.querySelectorAll('.pricing-card');
+  cards.forEach(card => {
+    const basePrice = parseFloat(card.dataset.productPrice);
+    const baseCurrency = (card.dataset.productCurrency || '').toUpperCase();
+    const amountEl = card.querySelector('.price-amount');
+    const currencyEl = card.querySelector('.price-currency');
+    if (!amountEl || !currencyEl) return;
+
+    if (!selectedDisplayCurrency || !basePrice || !baseCurrency) {
+      // Reset to original display
+      if (card.dataset.originalAmount) {
+        amountEl.textContent = card.dataset.originalAmount;
+        currencyEl.textContent = card.dataset.originalCurrency;
+      }
+      return;
+    }
+
+    // Save originals on first conversion
+    if (!card.dataset.originalAmount) {
+      card.dataset.originalAmount = amountEl.textContent;
+      card.dataset.originalCurrency = currencyEl.textContent;
+    }
+
+    const converted = convertPrice(basePrice, baseCurrency, selectedDisplayCurrency);
+    if (converted === null) {
+      // Fallback: show original
+      amountEl.textContent = card.dataset.originalAmount;
+      currencyEl.textContent = card.dataset.originalCurrency;
+      return;
+    }
+
+    amountEl.textContent = formatConvertedPrice(converted, selectedDisplayCurrency);
+    currencyEl.textContent = getCurrencySuffix(selectedDisplayCurrency);
+  });
+}
+
+function initCurrencySelector() {
+  const select = document.getElementById('displayCurrency');
+  if (!select) return;
+  const saved = localStorage.getItem('quantum_display_currency') || '';
+  select.value = saved;
+  selectedDisplayCurrency = saved;
+
+  select.addEventListener('change', () => {
+    selectedDisplayCurrency = select.value;
+    localStorage.setItem('quantum_display_currency', selectedDisplayCurrency);
+    applyDisplayCurrency();
+  });
+}
+
+// Load rates on page init, apply after programs render
+(async function initCurrencyDisplay() {
+  await loadExchangeRates();
+  initCurrencySelector();
+  applyDisplayCurrency();
+})();
 
 // ===== Dark Mode =====
 function toggleDarkMode() {
