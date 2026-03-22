@@ -2096,17 +2096,17 @@ function convertPrice(amount, fromCurrency, toCurrency) {
 }
 
 function formatConvertedPrice(amount, currency) {
-  const symbols = { USD: '$', EUR: '€', UAH: '₴', RUB: '₽', KGS: '' };
-  const sym = symbols[currency] || '';
-  const rounded = Math.round(amount);
-  const formatted = rounded.toLocaleString();
-  if (sym === '$' || sym === '€') return sym + formatted;
+  const rounded = currency === 'USD' ? Math.round(amount) : Math.round(amount);
+  const formatted = rounded.toLocaleString('ru-RU');
+  const symbols = { USD: '$', EUR: '€' };
+  const sym = symbols[currency];
+  if (sym) return sym + formatted;
   return formatted;
 }
 
-function getCurrencySuffix(currency) {
-  const suffixes = { KGS: 'KGS', RUB: '₽', UAH: '₴', USD: '', EUR: '' };
-  return suffixes[currency] != null ? suffixes[currency] : currency;
+function getCurrencyLabel(currency) {
+  const labels = { KGS: 'сом', RUB: '₽', UAH: '₴', USD: '', EUR: '' };
+  return labels[currency] != null ? labels[currency] : currency;
 }
 
 function applyDisplayCurrency() {
@@ -2118,38 +2118,41 @@ function applyDisplayCurrency() {
     const currencyEl = card.querySelector('.price-currency');
     if (!amountEl || !currencyEl) return;
 
-    if (!selectedDisplayCurrency || !basePrice || !baseCurrency) {
-      // Reset to original display
-      if (card.dataset.originalAmount) {
-        amountEl.textContent = card.dataset.originalAmount;
-        currencyEl.textContent = card.dataset.originalCurrency;
-      }
-      return;
-    }
-
-    // Save originals on first conversion
+    // Save originals on first call
     if (!card.dataset.originalAmount) {
       card.dataset.originalAmount = amountEl.textContent;
       card.dataset.originalCurrency = currencyEl.textContent;
     }
 
+    // If showing base currency or same as stored, restore originals
+    if (!selectedDisplayCurrency || selectedDisplayCurrency === baseCurrency || !basePrice || !baseCurrency) {
+      amountEl.textContent = card.dataset.originalAmount;
+      currencyEl.textContent = card.dataset.originalCurrency;
+      return;
+    }
+
     const converted = convertPrice(basePrice, baseCurrency, selectedDisplayCurrency);
     if (converted === null) {
-      // Fallback: show original
       amountEl.textContent = card.dataset.originalAmount;
       currencyEl.textContent = card.dataset.originalCurrency;
       return;
     }
 
     amountEl.textContent = formatConvertedPrice(converted, selectedDisplayCurrency);
-    currencyEl.textContent = getCurrencySuffix(selectedDisplayCurrency);
+
+    // Preserve trailing text like "/ месяц" from original currency label
+    const origCurrencyText = card.dataset.originalCurrency || '';
+    const slashIndex = origCurrencyText.indexOf('/');
+    const trailingSuffix = slashIndex !== -1 ? ' ' + origCurrencyText.slice(slashIndex).trim() : '';
+    const newLabel = getCurrencyLabel(selectedDisplayCurrency);
+    currencyEl.textContent = newLabel ? (newLabel + trailingSuffix) : trailingSuffix.trim();
   });
 }
 
 function initCurrencySelector() {
   const select = document.getElementById('displayCurrency');
   if (!select) return;
-  const saved = localStorage.getItem('quantum_display_currency') || '';
+  const saved = localStorage.getItem('quantum_display_currency') || 'USD';
   select.value = saved;
   selectedDisplayCurrency = saved;
 
