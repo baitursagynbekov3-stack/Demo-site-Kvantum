@@ -167,7 +167,7 @@
       buttonText: 'Join the Club',
       buttonText_ru: 'Вступить в клуб',
       actionType: 'purchase',
-      order: 2
+      order: 3
     },
     {
       name: 'Intensive "Mom & Dad"',
@@ -255,7 +255,7 @@
         }
       ],
       actionType: 'purchase',
-      order: 3
+      order: 4
     },
     {
       name: 'REBOOT',
@@ -379,7 +379,7 @@
         }
       ],
       actionType: 'purchase',
-      order: 4
+      order: 2
     },
     {
       name: 'Mentorship',
