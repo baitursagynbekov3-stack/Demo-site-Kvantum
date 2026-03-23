@@ -572,17 +572,24 @@
         <p class="section-subtitle" data-i18n="faq.subtitle">Задайте любой вопрос — наш ассистент ответит мгновенно</p>
       </div>
       <div class="faq-chat" id="faqChat">
+        <div class="faq-chat-header">
+          <div class="faq-chat-avatar">Q</div>
+          <div class="faq-chat-header-text">
+            <strong>Quantum Assistant</strong>
+            <span class="faq-chat-online">Online</span>
+          </div>
+        </div>
         <div class="faq-chat-messages" id="faqChatMessages">
           <div class="faq-msg bot">
             <div class="faq-msg-bubble">Hi! 🌟 Welcome to Quantum — I'm here to help you find exactly what you need. What can I answer for you?</div>
           </div>
         </div>
-        <div class="faq-chat-divider"></div>
         <form class="faq-chat-input" onsubmit="sendFaqQuestion(event); return false;">
-          <input type="text" id="faqInput" placeholder="Ask your question..." autocomplete="off">
-          <button type="submit" aria-label="Send">&#10148;</button>
+          <input type="text" id="faqInput" placeholder="Type your message..." autocomplete="off">
+          <button type="submit" aria-label="Send">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          </button>
         </form>
-        <div class="faq-chat-divider"></div>
       </div>
     </div>
   </section>
@@ -1027,7 +1034,7 @@
         <button onclick="sendQuickReply('Tell me about Brain Charge')" data-i18n="chat.qr2">Зарядка мозга</button>
         <button onclick="sendQuickReply('I want to book a consultation')" data-i18n="chat.qr3">Записаться</button>
       </div>
-      <form class="chatbot-input" onsubmit="sendChatMessage(event)">
+      <form class="chatbot-input" onsubmit="sendChatMessage(event); return false;">
         <input type="text" id="chatInput" data-i18n-placeholder="chat.placeholder" placeholder="Введите сообщение..." autocomplete="off">
         <button type="submit">&#10148;</button>
       </form>
