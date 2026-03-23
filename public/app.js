@@ -384,17 +384,33 @@ function parsePurchaseCall(onClickAttr) {
 function buildEcommerceItemFromCard(card, index) {
   if (!card) return null;
 
-  const button = card.querySelector('button[onclick*="handlePurchase("]');
-  const parsed = parsePurchaseCall(button && button.getAttribute('onclick'));
-  if (!parsed) return null;
+  // Read product info from card data attributes (set by renderPrograms)
+  var productId = card.getAttribute('data-product-id') || '';
+  var productName = card.getAttribute('data-product-name') || '';
+  var productPrice = card.getAttribute('data-product-price') || '0';
+  var productCurrency = card.getAttribute('data-product-currency') || 'KGS';
+
+  // Fallback: try legacy inline onclick parsing
+  if (!productId && !productName) {
+    var button = card.querySelector('button[onclick*="handlePurchase("]');
+    var parsed = parsePurchaseCall(button && button.getAttribute('onclick'));
+    if (parsed) {
+      productId = parsed.productId;
+      productName = parsed.productName;
+      productPrice = String(parsed.amount);
+      productCurrency = parsed.currency;
+    }
+  }
+
+  if (!productId && !productName) return null;
 
   const tier = sanitizeAttributionValue(card.getAttribute('data-tier'), 60) || 'program';
 
   return {
-    item_id: sanitizeAttributionValue(parsed.productId, 100) || sanitizeAttributionValue(parsed.productName, 100) || ('program_' + String(index + 1)),
-    item_name: sanitizeAttributionValue(parsed.productName, 100) || ('Program ' + String(index + 1)),
-    price: Number(parsed.amount) || 0,
-    currency: sanitizeAttributionValue(parsed.currency, 10) || 'KGS',
+    item_id: sanitizeAttributionValue(productId, 100) || sanitizeAttributionValue(productName, 100) || ('program_' + String(index + 1)),
+    item_name: sanitizeAttributionValue(productName, 100) || ('Program ' + String(index + 1)),
+    price: Number(productPrice) || 0,
+    currency: sanitizeAttributionValue(productCurrency, 10) || 'KGS',
     item_category: tier,
     item_list_id: 'programs',
     item_list_name: 'Programs',
@@ -526,7 +542,8 @@ function initAnalyticsEventBindings() {
     if (!trigger) return;
 
     const onClickAttr = String(trigger.getAttribute('onclick') || '');
-    if (onClickAttr.includes("openModal('consultModal')") || onClickAttr.includes('openModal("consultModal")')) {
+    var actionAttr = trigger.getAttribute('data-action') || '';
+    if (actionAttr === 'consult' || onClickAttr.includes("openModal('consultModal')") || onClickAttr.includes('openModal("consultModal")')) {
       trackAnalyticsEvent('cta_click', {
         cta_type: 'consult_open',
         cta_context: getCtaContext(trigger)
@@ -1263,7 +1280,7 @@ const translations = {
     'programs.bc.badge': 'Точка входа',
     'programs.bc.name': 'Зарядка мозга',
     'programs.bc.tagline': 'Перепрограммирование реальности',
-    'programs.bc.currency': 'сом / рублей',
+    'programs.bc.currency': 'сом / мес',
     'programs.bc.f1': 'Программа 21 день',
     'programs.bc.f2': '15 минут в день',
     'programs.bc.f3': 'Сессии в 6:00 утра (КР)',
@@ -1964,9 +1981,9 @@ function openProgramDetailsModal(programId) {
 
   let actionButtonHtml = '';
   if (program.actionType === 'consult') {
-    actionButtonHtml = `<button class="btn btn-primary btn-lg" type="button" onclick="closeModal('programDetailsModal'); openModal('consultModal');">${escapeHtml(lang === 'ru' ? 'Записаться' : 'Contact us')}</button>`;
+    actionButtonHtml = `<button class="btn btn-primary btn-lg" type="button" data-action="consult" data-close-modal="programDetailsModal">${escapeHtml(lang === 'ru' ? 'Записаться' : 'Contact us')}</button>`;
   } else if (program.priceNumeric > 0) {
-    actionButtonHtml = `<button class="btn btn-primary btn-lg" type="button" onclick="closeModal('programDetailsModal'); handlePurchase('${escapeHtml(program._id || program.id)}', '${escapeHtml(program.name)}', ${program.priceNumeric || 0}, '${escapeHtml(program.purchaseCurrency || 'KGS')}');">${escapeHtml(lang === 'ru' ? 'Купить программу' : 'Buy program')}</button>`;
+    actionButtonHtml = `<button class="btn btn-primary btn-lg" type="button" data-action="purchase" data-close-modal="programDetailsModal" data-product-id="${escapeHtml(String(program._id || program.id || ''))}" data-product-name="${escapeHtml(String(program.name || ''))}" data-product-price="${program.priceNumeric || 0}" data-product-currency="${escapeHtml(String(program.purchaseCurrency || 'KGS'))}">${escapeHtml(lang === 'ru' ? 'Купить программу' : 'Buy program')}</button>`;
   }
 
   body.innerHTML = `<div class="program-details-modal-shell">
@@ -2032,15 +2049,15 @@ function renderPrograms(items) {
 
     let btnHtml;
     if (detailsPrimaryAction && detailsText) {
-      btnHtml = `<button class="btn btn-primary btn-block" type="button" onclick="openProgramDetailsModal('${escapeHtml(p._id || p.id)}')">${escapeHtml(btnText)}</button>`;
+      btnHtml = `<button class="btn btn-primary btn-block" type="button" data-action="details" data-program-id="${escapeHtml(String(p._id || p.id || ''))}">${escapeHtml(btnText)}</button>`;
     } else if (p.actionType === 'consult') {
-      btnHtml = `<button class="btn btn-primary btn-block" onclick="openModal('consultModal')">${escapeHtml(btnText)}</button>`;
+      btnHtml = `<button class="btn btn-primary btn-block" type="button" data-action="consult">${escapeHtml(btnText)}</button>`;
     } else {
-      btnHtml = `<button class="btn btn-primary btn-block" onclick="handlePurchase('${escapeHtml(p._id || p.id)}', '${escapeHtml(p.name)}', ${p.priceNumeric || 0}, '${escapeHtml(p.purchaseCurrency || 'KGS')}')">${escapeHtml(btnText)}</button>`;
+      btnHtml = `<button class="btn btn-primary btn-block" type="button" data-action="purchase">${escapeHtml(btnText)}</button>`;
     }
 
     const detailsHtml = detailsText && !detailsPrimaryAction
-      ? `<button class="pricing-secondary-btn" type="button" onclick="openProgramDetailsModal('${escapeHtml(p._id || p.id)}')">${escapeHtml(detailsButtonText || (lang === 'ru' ? 'Узнать подробнее' : 'Learn more'))}</button>`
+      ? `<button class="pricing-secondary-btn" type="button" data-action="details" data-program-id="${escapeHtml(String(p._id || p.id || ''))}">${escapeHtml(detailsButtonText || (lang === 'ru' ? 'Узнать подробнее' : 'Learn more'))}</button>`
       : '';
 
     return `<div class="pricing-card anim-fade-up anim-visible ${cssClass}" data-tier="${escapeHtml(p.tier || '')}" data-product-id="${escapeHtml(String(p._id || p.id || ''))}" data-product-name="${escapeHtml(String(p.name || ''))}" data-product-price="${escapeHtml(String(p.priceNumeric || 0))}" data-product-currency="${escapeHtml(String(p.purchaseCurrency || 'KGS'))}">
@@ -2067,6 +2084,45 @@ function renderPrograms(items) {
   // Re-apply currency conversion after re-render
   if (typeof applyDisplayCurrency === 'function') applyDisplayCurrency();
 }
+
+// ===== Program Button Delegation =====
+// A single listener on #programs handles all card button clicks,
+// so handlers survive innerHTML re-renders (language switch, data reload, etc.).
+(function initProgramButtonDelegation() {
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-action]');
+    if (!btn) return;
+
+    // Only handle buttons inside the pricing grid or program details modal
+    var card = btn.closest('.pricing-card');
+    var inModal = btn.closest('.program-details-modal-actions');
+    if (!card && !inModal) return;
+
+    var action = btn.getAttribute('data-action');
+
+    // Close source modal first if specified (e.g. details modal → consult/purchase)
+    var closeModalId = btn.getAttribute('data-close-modal');
+    if (closeModalId) closeModal(closeModalId);
+
+    if (action === 'consult') {
+      openModal('consultModal');
+    } else if (action === 'details') {
+      var programId = btn.getAttribute('data-program-id');
+      if (programId) openProgramDetailsModal(programId);
+    } else if (action === 'purchase') {
+      // Modal buttons carry their own data-product-* attrs; card buttons read from parent card
+      var srcEl = inModal ? btn : card;
+      if (srcEl) {
+        handlePurchase(
+          srcEl.getAttribute('data-product-id'),
+          srcEl.getAttribute('data-product-name'),
+          Number(srcEl.getAttribute('data-product-price')) || 0,
+          srcEl.getAttribute('data-product-currency') || 'KGS'
+        );
+      }
+    }
+  });
+})();
 
 // ===== Currency Display Conversion =====
 let exchangeRates = null;
@@ -2879,9 +2935,12 @@ async function showPurchases() {
   document.getElementById('userDropdown').style.display = 'none';
 
   try {
-    const res = await apiFetch('/api/my-purchases');
+    const res = await apiFetch('/api/my-purchases', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
     if (!res.ok) throw new Error('Failed to load');
-    const purchases = await res.json();
+    const data = await res.json();
+    const purchases = Array.isArray(data) ? data : [];
 
     const isRu = currentLang === 'ru';
     const title = isRu ? 'Мои покупки' : 'My Purchases';

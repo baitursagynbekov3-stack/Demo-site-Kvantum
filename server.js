@@ -2260,6 +2260,41 @@ app.get('/api/admin/users', authenticateAdmin, async (req, res) => {
   }
 });
 
+// Admin update user role
+app.patch('/api/admin/users/:id/role', authenticateAdmin, async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    const newRole = normalizeUserRole(req.body.role);
+    if (!USER_ROLES.has(newRole)) {
+      return res.status(400).json({ error: 'Invalid role. Allowed: ' + [...USER_ROLES].join(', ') });
+    }
+
+    // Prevent admin from demoting themselves
+    if (req.user && req.user.id === userId && newRole !== 'admin') {
+      return res.status(400).json({ error: 'You cannot remove your own admin role' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: { role: newRole },
+      select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true }
+    });
+
+    res.json({ message: 'Role updated', user: updated });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
 // Admin leads list (bookings with search and status filter)
 app.get('/api/admin/leads', authenticateAdmin, async (req, res) => {
   try {

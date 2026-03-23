@@ -594,15 +594,25 @@ function renderProgramCards() {
 function openProgramForm(item) {
   document.getElementById('programModalTitle').textContent = item ? 'Edit Program' : 'Add Program';
   document.getElementById('pId').value = item ? item._id : '';
-  document.getElementById('pName').value = item ? item.name : '';
+  document.getElementById('pName').value = item ? item.name || '' : '';
   document.getElementById('pNameRu').value = item ? item.name_ru || '' : '';
   document.getElementById('pTagline').value = item ? item.tagline || '' : '';
+  document.getElementById('pTaglineRu').value = item ? item.tagline_ru || '' : '';
+  document.getElementById('pTierLabel').value = item ? item.tierLabel || '' : '';
+  document.getElementById('pTierLabelRu').value = item ? item.tierLabel_ru || '' : '';
   document.getElementById('pPriceNumeric').value = item ? item.priceNumeric || 0 : 0;
   document.getElementById('pPurchaseCurrency').value = item ? item.purchaseCurrency || 'KGS' : 'KGS';
+  document.getElementById('pPriceAmount').value = item ? item.priceAmount || '' : '';
+  document.getElementById('pPriceCurrency').value = item ? item.priceCurrency || '' : '';
+  document.getElementById('pPriceAmountRu').value = item ? item.priceAmount_ru || '' : '';
+  document.getElementById('pPriceCurrencyRu').value = item ? item.priceCurrency_ru || '' : '';
   document.getElementById('pFeatures').value = item ? (item.features || []).join('\n') : '';
   document.getElementById('pFeaturesRu').value = item ? (item.features_ru || []).join('\n') : '';
   document.getElementById('pActionType').value = item ? item.actionType || 'purchase' : 'purchase';
   document.getElementById('pPopular').value = item ? String(item.popular || false) : 'false';
+  document.getElementById('pButtonText').value = item ? item.buttonText || '' : '';
+  document.getElementById('pButtonTextRu').value = item ? item.buttonText_ru || '' : '';
+  document.getElementById('pOrder').value = item ? item.order || 0 : 0;
   openAdminModal('programModal');
 }
 
@@ -619,30 +629,44 @@ async function saveProgram(e) {
   const popular = document.getElementById('pPopular').value === 'true';
   const actionType = document.getElementById('pActionType').value;
 
-  // Auto-derive display fields from simplified inputs
-  const priceDisplay = price > 0 ? (currency === 'USD' ? '$' + price.toLocaleString() : price.toLocaleString()) : '';
-  const currencyLabel = currency === 'USD' ? '' : currency;
+  // Read display fields from the form; auto-derive only if left empty
+  const pPriceAmount = document.getElementById('pPriceAmount').value.trim();
+  const pPriceCurrency = document.getElementById('pPriceCurrency').value.trim();
+  const pPriceAmountRu = document.getElementById('pPriceAmountRu').value.trim();
+  const pPriceCurrencyRu = document.getElementById('pPriceCurrencyRu').value.trim();
+  const pTierLabel = document.getElementById('pTierLabel').value.trim();
+  const pTierLabelRu = document.getElementById('pTierLabelRu').value.trim();
+  const pButtonText = document.getElementById('pButtonText').value.trim();
+  const pButtonTextRu = document.getElementById('pButtonTextRu').value.trim();
+  const pOrder = parseInt(document.getElementById('pOrder').value, 10);
+
+  // Fallback display price: "$300" for USD, "5 000" for others
+  const defaultPriceDisplay = price > 0 ? (currency === 'USD' ? '$' + price.toLocaleString() : price.toLocaleString()) : '';
+  // Fallback display currency: empty for USD, "KGS / month" style for others
+  const defaultCurrencyLabel = currency === 'USD' ? '' : currency;
 
   const data = {
     name: document.getElementById('pName').value,
     name_ru: document.getElementById('pNameRu').value,
     tagline: document.getElementById('pTagline').value,
-    tagline_ru: '',
+    tagline_ru: document.getElementById('pTaglineRu').value,
     tier: popular ? 'popular' : 'standard',
     cssClass: popular ? 'popular' : '',
-    tierLabel: '',
-    tierLabel_ru: '',
-    priceAmount: priceDisplay,
-    priceCurrency: currencyLabel,
+    tierLabel: pTierLabel,
+    tierLabel_ru: pTierLabelRu,
+    priceAmount: pPriceAmount || defaultPriceDisplay,
+    priceAmount_ru: pPriceAmountRu || pPriceAmount || defaultPriceDisplay,
+    priceCurrency: pPriceCurrency || defaultCurrencyLabel,
+    priceCurrency_ru: pPriceCurrencyRu || pPriceCurrency || defaultCurrencyLabel,
     priceNumeric: price,
     purchaseCurrency: currency,
     features: document.getElementById('pFeatures').value.split('\n').map(s => s.trim()).filter(Boolean),
     features_ru: document.getElementById('pFeaturesRu').value.split('\n').map(s => s.trim()).filter(Boolean),
-    buttonText: actionType === 'purchase' ? 'Get Started' : 'Contact Us',
-    buttonText_ru: actionType === 'purchase' ? 'Начать' : 'Связаться',
+    buttonText: pButtonText || (actionType === 'purchase' ? 'Get Started' : 'Contact Us'),
+    buttonText_ru: pButtonTextRu || (actionType === 'purchase' ? 'Начать' : 'Связаться'),
     actionType,
     popular,
-    order: id ? (programs.find(p => p._id === id) || {}).order || 0 : programs.length + 1
+    order: Number.isFinite(pOrder) ? pOrder : (id ? (programs.find(p => p._id === id) || {}).order || 0 : programs.length + 1)
   };
 
   try {
@@ -1293,16 +1317,55 @@ function renderUsers() {
     return;
   }
 
-  tbody.innerHTML = filtered.map((u, i) => `
-    <tr>
+  const currentEmail = currentUser ? (currentUser.email || '').toLowerCase() : '';
+
+  tbody.innerHTML = filtered.map((u) => {
+    const role = u.role || 'user';
+    const isSelf = (u.email || '').toLowerCase() === currentEmail;
+    const roleCell = isSelf
+      ? `<span class="role-badge ${esc(role)}">${esc(role)}</span>`
+      : `<select class="role-select" data-user-id="${u.id}" onchange="updateUserRole(${u.id}, this.value)">
+           <option value="user"${role === 'user' ? ' selected' : ''}>user</option>
+           <option value="admin"${role === 'admin' ? ' selected' : ''}>admin</option>
+         </select>`;
+    return `<tr>
       <td style="color:#555">${u.id}</td>
       <td style="color:#fff">${esc(u.name || '-')}</td>
       <td>${esc(u.email || '-')}</td>
       <td>${esc(u.phone || '-')}</td>
-      <td><span class="role-badge ${esc(u.role || 'user')}">${esc(u.role || 'user')}</span></td>
+      <td>${roleCell}</td>
       <td>${esc(formatDateTime(u.createdAt))}</td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
+}
+
+async function updateUserRole(userId, newRole) {
+  try {
+    const res = await adminFetch('/api/admin/users/' + userId + '/role', {
+      method: 'PATCH',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showToast(data.error || 'Failed to update role', 'error');
+      renderUsers(); // revert dropdown to previous value
+      return;
+    }
+
+    // Update local state
+    const idx = allUsers.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      allUsers[idx].role = newRole;
+      saveAdminCache('users', allUsers);
+    }
+
+    showToast('Role updated to ' + newRole, 'success');
+  } catch (e) {
+    showToast('Failed to update role', 'error');
+    renderUsers();
+  }
 }
 
 // ================================================================
