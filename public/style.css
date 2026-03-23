@@ -2458,7 +2458,7 @@ body.dark-mode .phone-input-group .country-code-select {
   bottom: 68px;
   right: 0;
   width: 380px;
-  max-height: 500px;
+  height: 500px;
   background: var(--white);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
@@ -2496,7 +2496,7 @@ body.dark-mode .phone-input-group .country-code-select {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
-  max-height: 300px;
+  min-height: 0;
 }
 .chat-message { margin-bottom: 12px; display: flex; }
 .chat-message.bot { justify-content: flex-start; }
@@ -2847,7 +2847,7 @@ body.dark-mode .phone-input-group .country-code-select {
   body { font-size: 18px; }
   .hero { padding: 170px 0 120px; }
   .hero-content { max-width: 1080px; }
-  .chatbot-window { width: 440px; max-height: 620px; }
+  .chatbot-window { width: 440px; height: 580px; }
 }
 
 @media (min-width: 2560px) {
@@ -2925,7 +2925,7 @@ body.dark-mode .phone-input-group .country-code-select {
   .chatbot-widget { right: 12px; bottom: 12px; }
   body.has-mobile-sticky-cta .chatbot-widget { bottom: 86px; }
   .chatbot-toggle { width: 52px; height: 52px; }
-  .chatbot-window { width: calc(100vw - 16px); right: -4px; max-height: 68vh; }
+  .chatbot-window { width: calc(100vw - 16px); right: -4px; height: 68vh; }
 }
 
 /* ===== Profile Modal ===== */
