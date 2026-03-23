@@ -344,6 +344,40 @@
           isPrimary: false
         }
       ],
+      detailsReviews: [
+        {
+          text: 'I felt lightness, enjoyment, and even euphoria. Thank you, Altynai.',
+          author: 'Amina',
+          role: 'Program participant'
+        },
+        {
+          text: 'I realized there are things more valuable than money, things that money cannot buy.',
+          author: 'Sofia',
+          role: 'REBOOT client'
+        },
+        {
+          text: 'I understood again that the true value is me and my life. When we allow ourselves to have what we really want, we receive it.',
+          author: 'Leila',
+          role: 'Transformation student'
+        }
+      ],
+      detailsReviews_ru: [
+        {
+          text: 'Здравствуйте всем. У меня появилась легкость, наслаждение, эйфория. Благодарю вас, Алтынай.',
+          author: 'Амина',
+          role: 'Участница программы'
+        },
+        {
+          text: 'Доброе утро. Я осознала, что есть вещи, которые дороже, чем деньги, и которые не покупаются деньгами.',
+          author: 'София',
+          role: 'Клиентка REBOOT'
+        },
+        {
+          text: 'Алтынай, благодарю за танец и за практику. Я еще раз поняла, что ценность — это я и моя жизнь, а остальное вторично. Если мы разрешим себе иметь то, что хотим, то мы это получим. Спасибо за бесценные знания.',
+          author: 'Лейла',
+          role: 'Участница трансформации'
+        }
+      ],
       actionType: 'purchase',
       order: 4
     },
