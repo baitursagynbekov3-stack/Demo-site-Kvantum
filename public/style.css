@@ -2681,7 +2681,7 @@ body.dark-mode .phone-input-group .country-code-select {
 @media (min-width: 1025px) and (max-width: 1280px) {
   .services-grid { grid-template-columns: repeat(2, 1fr); }
   .testimonials-grid { grid-auto-columns: calc((100% - 32px) / 2); }
-  .video-reviews-grid { grid-template-columns: repeat(3, 1fr); }
+  .video-reviews-grid { grid-template-columns: repeat(4, 1fr); }
 }
 
 @media (max-width: 768px) {
@@ -2723,11 +2723,11 @@ body.dark-mode .phone-input-group .country-code-select {
   .modal-overlay { padding: 12px; }
   .modal { padding: 24px 16px; max-height: 92vh; }
   .chatbot-window { width: calc(100vw - 24px); right: -2px; bottom: 62px; }
-  .video-reviews-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .video-reviews-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
 }
 
 @media (max-width: 480px) {
-  .video-reviews-grid { gap: 10px; }
+  .video-reviews-grid { grid-template-columns: 1fr; gap: 14px; max-width: 280px; margin: 0 auto; }
   .user-dropdown { min-width: 180px; max-width: calc(100vw - 24px); }
   .nav-actions { gap: 6px; }
   .dark-toggle,
