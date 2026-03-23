@@ -118,6 +118,65 @@
     .form-group select option { background: #111; color: #e0e0e0; }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .admin-modal-program { max-width: 640px; padding: 32px; }
+    .program-form { display: grid; gap: 20px; }
+    .program-form-intro {
+      margin: -4px 0 6px;
+      padding: 14px 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      color: #aeb6c7;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .program-form-section {
+      display: grid;
+      gap: 16px;
+      padding: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      background: #131923;
+    }
+    .program-form-section h3 {
+      margin: 0;
+      font-size: 15px;
+      color: #fff;
+      font-weight: 700;
+    }
+    .program-form-section p {
+      margin: -8px 0 2px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #8e98ab;
+    }
+    .program-form .form-group { margin-bottom: 0; }
+    .program-form .form-group label {
+      margin-bottom: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #c7cfde;
+    }
+    .program-form .form-group small {
+      display: block;
+      margin-top: 6px;
+      color: #7d8799;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .program-form input,
+    .program-form textarea,
+    .program-form select {
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 15px;
+      background: #0f141d;
+    }
+    .program-form textarea { min-height: 112px; }
+    .program-form .form-actions {
+      margin-top: 4px;
+      padding-top: 4px;
+    }
 
     /* Toast */
     .admin-toast {
@@ -380,10 +439,10 @@
         <!-- Programs Section -->
         <div id="section-programs" style="display:none">
           <div class="admin-header">
-            <h1>Programs</h1>
+            <h1>Программы</h1>
             <div class="admin-header-actions">
-              <button class="btn btn-secondary" onclick="restoreDefaultPrograms()">Restore Defaults</button>
-              <button class="btn btn-primary" onclick="openProgramForm()">+ Add Program</button>
+              <button class="btn btn-secondary" onclick="restoreDefaultPrograms()">Вернуть по умолчанию</button>
+              <button class="btn btn-primary" onclick="openProgramForm()">+ Добавить программу</button>
             </div>
           </div>
           <div class="admin-cards" id="programsList"></div>
@@ -570,112 +629,59 @@
 
   <!-- Program Modal -->
   <div class="admin-modal-overlay" id="programModal">
-    <div class="admin-modal">
+    <div class="admin-modal admin-modal-program">
       <button class="close-btn" onclick="closeAdminModal('programModal')">&times;</button>
-      <h2 id="programModalTitle">Add Program</h2>
-      <form id="programForm" onsubmit="saveProgram(event)">
+      <h2 id="programModalTitle">Редактировать программу</h2>
+      <form id="programForm" class="program-form" onsubmit="saveProgram(event)">
         <input type="hidden" id="pId">
-        <div class="form-group">
-          <label>Program Name</label>
-          <input type="text" id="pName" required placeholder="e.g. Brain Charge">
+        <div class="program-form-intro">
+          Редактирование только по-русски. Все остальные значения сохраняются автоматически, чтобы не ломать карточку и detail-экран.
         </div>
-        <div class="form-group">
-          <label>Название (RU)</label>
-          <input type="text" id="pNameRu" placeholder="e.g. Зарядка мозга">
-        </div>
-        <div class="form-group">
-          <label>Short Description</label>
-          <input type="text" id="pTagline" placeholder="e.g. Reality Reprogramming">
-        </div>
-        <div class="form-group">
-          <label>Короткое описание (RU)</label>
-          <input type="text" id="pTaglineRu" placeholder="e.g. Перепрограммирование реальности">
-        </div>
-        <div class="form-row">
+
+        <div class="program-form-section">
+          <h3>Основное</h3>
           <div class="form-group">
-            <label>Badge Label</label>
-            <input type="text" id="pTierLabel" placeholder="e.g. Premium">
+            <label>Название программы</label>
+            <input type="text" id="pName" required placeholder="Например: Зарядка мозга">
           </div>
           <div class="form-group">
-            <label>Badge Label (RU)</label>
-            <input type="text" id="pTierLabelRu" placeholder="e.g. Премиум">
+            <label>Описание</label>
+            <textarea id="pTagline" placeholder="Например: Перепрограммирование реальности"></textarea>
+            <small>Короткое описание под названием программы на карточке.</small>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Price</label>
-            <input type="number" id="pPriceNumeric" value="0" min="0" placeholder="1000">
-          </div>
-          <div class="form-group">
-            <label>Currency</label>
-            <select id="pPurchaseCurrency">
-              <option value="KGS">KGS</option>
-              <option value="USD">USD</option>
-              <option value="RUB">RUB</option>
-            </select>
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Display Price</label>
-            <input type="text" id="pPriceAmount" placeholder="e.g. $300 or 5 000">
-          </div>
-          <div class="form-group">
-            <label>Display Currency</label>
-            <input type="text" id="pPriceCurrency" placeholder="e.g. KGS / month">
+
+        <div class="program-form-section">
+          <h3>Цена</h3>
+          <p>Число и валюта отображаются вместе. Если цену не трогать, старый вид карточки сохранится.</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Цена</label>
+              <input type="number" id="pPriceNumeric" value="0" min="0" placeholder="Например: 5000">
+            </div>
+            <div class="form-group">
+              <label>Валюта</label>
+              <select id="pPurchaseCurrency">
+                <option value="KGS">KGS</option>
+                <option value="USD">USD</option>
+                <option value="RUB">RUB</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div class="form-row">
+
+        <div class="program-form-section">
+          <h3>Метка</h3>
           <div class="form-group">
-            <label>Display Price (RU)</label>
-            <input type="text" id="pPriceAmountRu" placeholder="e.g. Уточните">
-          </div>
-          <div class="form-group">
-            <label>Display Currency (RU)</label>
-            <input type="text" id="pPriceCurrencyRu" placeholder="e.g. у менеджеров">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Features (one per line)</label>
-          <textarea id="pFeatures" rows="4" placeholder="21 days program&#10;15 minutes per day&#10;..."></textarea>
-        </div>
-        <div class="form-group">
-          <label>Особенности RU (one per line)</label>
-          <textarea id="pFeaturesRu" rows="4" placeholder="Программа 21 день&#10;15 минут в день&#10;..."></textarea>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>When clicked</label>
-            <select id="pActionType">
-              <option value="purchase">Buy Now</option>
-              <option value="consult">Contact Us</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Highlight?</label>
-            <select id="pPopular">
-              <option value="false">No</option>
-              <option value="true">Yes (featured)</option>
-            </select>
+            <label>Метка на карточке</label>
+            <input type="text" id="pTierLabel" placeholder="Например: Популярная">
+            <small>Необязательно. Если поле пустое, метка на карточке не показывается.</small>
           </div>
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Button Text</label>
-            <input type="text" id="pButtonText" placeholder="e.g. Start">
-          </div>
-          <div class="form-group">
-            <label>Button Text (RU)</label>
-            <input type="text" id="pButtonTextRu" placeholder="e.g. Начать">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Display Order</label>
-          <input type="number" id="pOrder" value="0" min="0">
-        </div>
+
         <div class="form-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeAdminModal('programModal')">Cancel</button>
-          <button type="submit" class="btn btn-primary" style="padding:10px 24px;">Save</button>
+          <button type="button" class="btn btn-secondary" onclick="closeAdminModal('programModal')">Отмена</button>
+          <button type="submit" class="btn btn-primary" style="padding:10px 24px;">Сохранить</button>
         </div>
       </form>
     </div>
@@ -792,7 +798,7 @@
 
   <script src="./config.js?v=20260318-7"></script>
   <script src="./program-defaults.js?v=20260323-2"></script>
-  <script src="./admin.js?v=20260318-7"></script>
+  <script src="./admin.js?v=20260323-4"></script>
   <script src="./favicon-aurora.js?v=20260318-7"></script>
 </body>
 </html>

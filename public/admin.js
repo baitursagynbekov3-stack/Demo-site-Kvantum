@@ -559,7 +559,7 @@ async function loadPrograms() {
       renderProgramCards();
     }
   } catch (e) {
-    showToast('Failed to load programs', 'error');
+    showToast('Не удалось загрузить программы', 'error');
   }
 }
 
@@ -568,51 +568,41 @@ function renderProgramCards() {
   if (!programs.length) {
     el.innerHTML = `<div class="empty-state">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      <p>No programs yet. Add your first one!</p>
+      <p>Программы ещё не добавлены.</p>
     </div>`;
     return;
   }
   el.innerHTML = programs.map(p => {
     const price = p.priceNumeric || 0;
     const cur = p.purchaseCurrency || 'KGS';
-    const priceText = price > 0 ? (cur === 'USD' ? '$' + price.toLocaleString() : price.toLocaleString() + ' ' + cur) : 'Contact for price';
-    const features = (p.features || []).slice(0, 3);
+    const priceText = price > 0 ? (cur === 'USD' ? '$' + price.toLocaleString() : price.toLocaleString('ru-RU') + ' ' + cur) : 'Цена по запросу';
+    const featuresSource = (p.features_ru && p.features_ru.length ? p.features_ru : (p.features || []));
+    const features = featuresSource.slice(0, 3);
+    const badge = p.tierLabel_ru || p.tierLabel || '';
+    const title = p.name_ru || p.name || '';
+    const description = p.tagline_ru || p.tagline || '';
     return `<div class="admin-card">
-      ${p.popular ? '<div class="card-badge">Featured</div>' : ''}
-      <h3>${esc(p.name)}</h3>
-      <p>${esc(p.tagline || '')}</p>
-      <div class="card-meta">${priceText} · ${p.actionType === 'purchase' ? 'Buy Now' : 'Contact Us'}</div>
-      ${features.length ? `<div class="features-preview">${features.map(f => `<span>${esc(f)}</span>`).join('')}${(p.features || []).length > 3 ? `<span>+${(p.features || []).length - 3} more</span>` : ''}</div>` : ''}
+      ${badge ? `<div class="card-badge">${esc(badge)}</div>` : ''}
+      <h3>${esc(title)}</h3>
+      <p>${esc(description)}</p>
+      <div class="card-meta">${priceText} · ${p.actionType === 'purchase' ? 'Покупка' : 'Консультация'}</div>
+      ${features.length ? `<div class="features-preview">${features.map(f => `<span>${esc(f)}</span>`).join('')}${featuresSource.length > 3 ? `<span>+${featuresSource.length - 3} ещё</span>` : ''}</div>` : ''}
       <div class="card-actions">
-        <button class="btn btn-secondary btn-sm" onclick="editProgram('${p._id}')">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteProgram('${p._id}')">Delete</button>
+        <button class="btn btn-secondary btn-sm" onclick="editProgram('${p._id}')">Изменить</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProgram('${p._id}')">Удалить</button>
       </div>
     </div>`;
   }).join('');
 }
 
 function openProgramForm(item) {
-  document.getElementById('programModalTitle').textContent = item ? 'Edit Program' : 'Add Program';
+  document.getElementById('programModalTitle').textContent = item ? 'Редактировать программу' : 'Добавить программу';
   document.getElementById('pId').value = item ? item._id : '';
-  document.getElementById('pName').value = item ? item.name || '' : '';
-  document.getElementById('pNameRu').value = item ? item.name_ru || '' : '';
-  document.getElementById('pTagline').value = item ? item.tagline || '' : '';
-  document.getElementById('pTaglineRu').value = item ? item.tagline_ru || '' : '';
-  document.getElementById('pTierLabel').value = item ? item.tierLabel || '' : '';
-  document.getElementById('pTierLabelRu').value = item ? item.tierLabel_ru || '' : '';
+  document.getElementById('pName').value = item ? item.name_ru || item.name || '' : '';
+  document.getElementById('pTagline').value = item ? item.tagline_ru || item.tagline || '' : '';
+  document.getElementById('pTierLabel').value = item ? item.tierLabel_ru || item.tierLabel || '' : '';
   document.getElementById('pPriceNumeric').value = item ? item.priceNumeric || 0 : 0;
   document.getElementById('pPurchaseCurrency').value = item ? item.purchaseCurrency || 'KGS' : 'KGS';
-  document.getElementById('pPriceAmount').value = item ? item.priceAmount || '' : '';
-  document.getElementById('pPriceCurrency').value = item ? item.priceCurrency || '' : '';
-  document.getElementById('pPriceAmountRu').value = item ? item.priceAmount_ru || '' : '';
-  document.getElementById('pPriceCurrencyRu').value = item ? item.priceCurrency_ru || '' : '';
-  document.getElementById('pFeatures').value = item ? (item.features || []).join('\n') : '';
-  document.getElementById('pFeaturesRu').value = item ? (item.features_ru || []).join('\n') : '';
-  document.getElementById('pActionType').value = item ? item.actionType || 'purchase' : 'purchase';
-  document.getElementById('pPopular').value = item ? String(item.popular || false) : 'false';
-  document.getElementById('pButtonText').value = item ? item.buttonText || '' : '';
-  document.getElementById('pButtonTextRu').value = item ? item.buttonText_ru || '' : '';
-  document.getElementById('pOrder').value = item ? item.order || 0 : 0;
   openAdminModal('programModal');
 }
 
@@ -624,49 +614,62 @@ function editProgram(id) {
 async function saveProgram(e) {
   e.preventDefault();
   const id = document.getElementById('pId').value;
+  const existing = id ? programs.find(p => p._id === id) : null;
+  const name = document.getElementById('pName').value.trim();
+  const tagline = document.getElementById('pTagline').value.trim();
+  const tierLabel = document.getElementById('pTierLabel').value.trim();
   const price = parseFloat(document.getElementById('pPriceNumeric').value) || 0;
   const currency = document.getElementById('pPurchaseCurrency').value;
-  const popular = document.getElementById('pPopular').value === 'true';
-  const actionType = document.getElementById('pActionType').value;
+  const actionType = existing ? existing.actionType || (price > 0 ? 'purchase' : 'consult') : (price > 0 ? 'purchase' : 'consult');
+  const order = existing ? existing.order || 0 : programs.length + 1;
+  const currentPopular = existing ? !!existing.popular : false;
+  const popular = tierLabel ? currentPopular : false;
+  const displayPriceChanged = !existing
+    || Number(existing.priceNumeric || 0) !== price
+    || String(existing.purchaseCurrency || 'KGS') !== String(currency);
 
-  // Read display fields from the form; auto-derive only if left empty
-  const pPriceAmount = document.getElementById('pPriceAmount').value.trim();
-  const pPriceCurrency = document.getElementById('pPriceCurrency').value.trim();
-  const pPriceAmountRu = document.getElementById('pPriceAmountRu').value.trim();
-  const pPriceCurrencyRu = document.getElementById('pPriceCurrencyRu').value.trim();
-  const pTierLabel = document.getElementById('pTierLabel').value.trim();
-  const pTierLabelRu = document.getElementById('pTierLabelRu').value.trim();
-  const pButtonText = document.getElementById('pButtonText').value.trim();
-  const pButtonTextRu = document.getElementById('pButtonTextRu').value.trim();
-  const pOrder = parseInt(document.getElementById('pOrder').value, 10);
+  let priceAmount = existing ? (existing.priceAmount_ru || existing.priceAmount || '') : '';
+  let priceCurrency = existing ? (existing.priceCurrency_ru || existing.priceCurrency || '') : '';
 
-  // Fallback display price: "$300" for USD, "5 000" for others
-  const defaultPriceDisplay = price > 0 ? (currency === 'USD' ? '$' + price.toLocaleString() : price.toLocaleString()) : '';
-  // Fallback display currency: empty for USD, "KGS / month" style for others
-  const defaultCurrencyLabel = currency === 'USD' ? '' : currency;
+  if (displayPriceChanged) {
+    if (price > 0) {
+      priceAmount = currency === 'USD' ? '$' + price.toLocaleString('en-US') : price.toLocaleString('ru-RU');
+      priceCurrency = currency === 'USD' ? '' : currency;
+    } else {
+      priceAmount = 'Уточните';
+      priceCurrency = 'у менеджера';
+    }
+  } else {
+    if (!priceAmount && price <= 0) priceAmount = 'Уточните';
+    if (!priceCurrency && price <= 0) priceCurrency = 'у менеджера';
+  }
+
+  const existingData = existing ? { ...existing } : {};
+  delete existingData._id;
 
   const data = {
-    name: document.getElementById('pName').value,
-    name_ru: document.getElementById('pNameRu').value,
-    tagline: document.getElementById('pTagline').value,
-    tagline_ru: document.getElementById('pTaglineRu').value,
-    tier: popular ? 'popular' : 'standard',
-    cssClass: popular ? 'popular' : '',
-    tierLabel: pTierLabel,
-    tierLabel_ru: pTierLabelRu,
-    priceAmount: pPriceAmount || defaultPriceDisplay,
-    priceAmount_ru: pPriceAmountRu || pPriceAmount || defaultPriceDisplay,
-    priceCurrency: pPriceCurrency || defaultCurrencyLabel,
-    priceCurrency_ru: pPriceCurrencyRu || pPriceCurrency || defaultCurrencyLabel,
+    ...existingData,
+    name,
+    name_ru: name,
+    tagline,
+    tagline_ru: tagline,
+    tierLabel,
+    tierLabel_ru: tierLabel,
+    priceAmount,
+    priceAmount_ru: priceAmount,
+    priceCurrency,
+    priceCurrency_ru: priceCurrency,
     priceNumeric: price,
     purchaseCurrency: currency,
-    features: document.getElementById('pFeatures').value.split('\n').map(s => s.trim()).filter(Boolean),
-    features_ru: document.getElementById('pFeaturesRu').value.split('\n').map(s => s.trim()).filter(Boolean),
-    buttonText: pButtonText || (actionType === 'purchase' ? 'Get Started' : 'Contact Us'),
-    buttonText_ru: pButtonTextRu || (actionType === 'purchase' ? 'Начать' : 'Связаться'),
+    features: existing ? (existing.features || []) : [],
+    features_ru: existing ? ((existing.features_ru && existing.features_ru.length) ? existing.features_ru : (existing.features || [])) : [],
+    buttonText: existing ? (existing.buttonText || (actionType === 'purchase' ? 'Начать' : 'Связаться')) : (actionType === 'purchase' ? 'Начать' : 'Связаться'),
+    buttonText_ru: existing ? (existing.buttonText_ru || existing.buttonText || (actionType === 'purchase' ? 'Начать' : 'Связаться')) : (actionType === 'purchase' ? 'Начать' : 'Связаться'),
     actionType,
     popular,
-    order: Number.isFinite(pOrder) ? pOrder : (id ? (programs.find(p => p._id === id) || {}).order || 0 : programs.length + 1)
+    cssClass: popular ? 'popular' : '',
+    tier: existing ? (existing.tier || 'standard') : 'standard',
+    order
   };
 
   try {
@@ -674,28 +677,28 @@ async function saveProgram(e) {
     const method = id ? 'PUT' : 'POST';
     const res = await adminFetch(url, { method, headers: authHeaders(), body: JSON.stringify(data) });
     if (res.ok) {
-      showToast(id ? 'Program updated' : 'Program created', 'success');
+      showToast(id ? 'Программа обновлена' : 'Программа создана', 'success');
       closeAdminModal('programModal');
       loadPrograms();
     } else {
       const err = await res.json();
-      showToast(err.error || 'Save failed', 'error');
+      showToast(err.error || 'Не удалось сохранить программу', 'error');
     }
   } catch (e) {
-    showToast('Save failed', 'error');
+    showToast('Не удалось сохранить программу', 'error');
   }
 }
 
 async function deleteProgram(id) {
-  if (!confirm('Delete this program?')) return;
+  if (!confirm('Удалить эту программу?')) return;
   try {
     const res = await adminFetch('/api/admin/programs/' + id, { method: 'DELETE', headers: authHeaders() });
     if (res.ok) {
-      showToast('Program deleted', 'success');
+      showToast('Программа удалена', 'success');
       loadPrograms();
     }
   } catch (e) {
-    showToast('Delete failed', 'error');
+    showToast('Не удалось удалить программу', 'error');
   }
 }
 
