@@ -108,6 +108,78 @@ body.dark-mode .nav-links.active a { color: #dedede; }
 body.dark-mode .mobile-nav-buttons .btn-outline { color: #dedede; border-color: #333; }
 body.dark-mode .cookie-banner { background: #1a1a1a; color: #bbb; }
 
+/* ── Global text, titles, labels ── */
+body.dark-mode { color: #dedede; }
+body.dark-mode .section-title,
+body.dark-mode .subsection-title { color: #dedede; }
+body.dark-mode .section-subtitle { color: #999; }
+body.dark-mode .section-label { color: var(--primary); }
+body.dark-mode .stat-number { color: #dedede; }
+body.dark-mode .stat-label { color: #999; }
+
+/* ── About section ── */
+body.dark-mode .about-quote { color: #bbb; }
+body.dark-mode .about-text { color: #bbb; }
+
+/* ── Services & Individual cards ── */
+body.dark-mode .service-card h3 { color: #dedede; }
+body.dark-mode .service-card p { color: #bbb; }
+body.dark-mode .individual-card h4 { color: #dedede; }
+body.dark-mode .individual-card p { color: #bbb; }
+
+/* ── Pricing cards ── */
+body.dark-mode .pricing-name { color: #dedede; }
+body.dark-mode .pricing-tagline { color: #999; }
+body.dark-mode .pricing-features li { color: #bbb; }
+body.dark-mode .price-currency { color: #999; }
+body.dark-mode .pricing-details-label { color: var(--primary); }
+body.dark-mode .pricing-details-card { background: #222; border-color: #333; }
+body.dark-mode .pricing-details-card > p { color: #bbb; }
+
+/* ── Program detail modal & carousel ── */
+body.dark-mode .program-detail-carousel-title { color: #dedede; }
+body.dark-mode .program-detail-nav { color: #dedede; background: rgba(255,255,255,0.08); }
+body.dark-mode .program-detail-nav:hover { background: rgba(255,255,255,0.15); }
+body.dark-mode .program-detail-review-text { color: #bbb; }
+body.dark-mode .program-detail-review-author strong { color: #dedede; }
+body.dark-mode .program-detail-review-author span { color: #999; }
+body.dark-mode .program-detail-review-card { background: #222; border-color: #333; }
+body.dark-mode .program-detail-section-head h3 { color: #dedede; }
+body.dark-mode .program-details-modal-shell { color: #dedede; }
+body.dark-mode .program-details-modal-title { color: #fff; }
+body.dark-mode .program-details-modal-tagline { color: #999; }
+body.dark-mode .program-details-modal-price span { color: #dedede; }
+body.dark-mode .program-details-modal-price small { color: #999; }
+body.dark-mode .program-details-modal-card { background: #222; border-color: #333; }
+body.dark-mode .program-details-modal-card p { color: #bbb; }
+
+/* ── Testimonials ── */
+body.dark-mode .testimonial-card p { color: #bbb; }
+body.dark-mode .testimonial-quote { color: rgba(255,255,255,0.15); }
+body.dark-mode .testimonial-author { color: #dedede; }
+body.dark-mode .testimonial-role { color: #999; }
+body.dark-mode .testimonials-nav { color: #dedede; background: rgba(255,255,255,0.08); }
+body.dark-mode .testimonials-nav:hover { background: rgba(255,255,255,0.15); }
+
+/* ── Forms (all modals, contact form) ── */
+body.dark-mode .form-group label { color: #ccc; }
+body.dark-mode .modal-form h2 { color: #dedede; }
+body.dark-mode .modal-description { color: #999; }
+body.dark-mode .modal-form p { color: #bbb; }
+body.dark-mode .tab-btn { color: #999; }
+body.dark-mode .tab-btn.active { color: var(--primary); }
+
+/* ── Contact section ── */
+body.dark-mode .contact-note p { color: #bbb; }
+
+/* ── FAQ section ── */
+body.dark-mode .faq-question { color: #dedede; }
+body.dark-mode .faq-answer { color: #bbb; }
+body.dark-mode .faq-item { border-color: #333; }
+
+/* ── Toast notifications ── */
+body.dark-mode .toast { color: #dedede; }
+
 /* Keep originally-dark sections dark in dark mode */
 body.dark-mode .logo-text { color: #ffffff; }
 body.dark-mode .logo-icon { color: #ffffff; }
