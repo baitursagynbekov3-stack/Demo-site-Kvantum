@@ -579,6 +579,29 @@ function refreshProgramFeatureRows() {
   });
 }
 
+function normalizeProgramFeatureRows() {
+  const list = document.getElementById('programFeatureList');
+  if (!list) return;
+
+  const rows = Array.from(list.querySelectorAll('.program-feature-item'));
+  const filledRows = rows.filter((row) => {
+    const input = row.querySelector('.program-feature-input');
+    return input && input.value.trim();
+  });
+
+  if (!filledRows.length) {
+    list.innerHTML = '';
+    addProgramFeatureRow('');
+    return;
+  }
+
+  rows.forEach((row) => {
+    if (!filledRows.includes(row)) row.remove();
+  });
+
+  refreshProgramFeatureRows();
+}
+
 function onProgramFeatureDragStart(event) {
   draggedProgramFeatureRow = event.currentTarget;
   if (event.dataTransfer) {
@@ -620,10 +643,47 @@ function onProgramFeatureDragEnd(event) {
   refreshProgramFeatureRows();
 }
 
-function addProgramFeatureRow(value) {
-  const list = document.getElementById('programFeatureList');
-  if (!list) return;
+function onProgramFeatureBlur(event) {
+  const input = event.currentTarget;
+  if (!input) return;
+  if (input.value.trim()) {
+    refreshProgramFeatureRows();
+    return;
+  }
+  normalizeProgramFeatureRows();
+}
 
+function onProgramFeaturePaste(event) {
+  const input = event.currentTarget;
+  const list = document.getElementById('programFeatureList');
+  if (!input || !list || !event.clipboardData) return;
+
+  const text = event.clipboardData.getData('text');
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length <= 1) return;
+
+  event.preventDefault();
+
+  const row = input.closest('.program-feature-item');
+  if (!row) return;
+
+  input.value = lines[0];
+  let insertAfter = row;
+
+  lines.slice(1).forEach((line) => {
+    const newRow = createProgramFeatureRow(line);
+    list.insertBefore(newRow, insertAfter.nextSibling);
+    insertAfter = newRow;
+  });
+
+  refreshProgramFeatureRows();
+}
+
+function createProgramFeatureRow(value) {
   const row = document.createElement('div');
   row.className = 'program-feature-item';
   row.draggable = true;
@@ -637,6 +697,19 @@ function addProgramFeatureRow(value) {
   row.addEventListener('dragover', onProgramFeatureDragOver);
   row.addEventListener('drop', onProgramFeatureDrop);
   row.addEventListener('dragend', onProgramFeatureDragEnd);
+  const input = row.querySelector('.program-feature-input');
+  if (input) {
+    input.addEventListener('blur', onProgramFeatureBlur);
+    input.addEventListener('paste', onProgramFeaturePaste);
+  }
+  return row;
+}
+
+function addProgramFeatureRow(value) {
+  const list = document.getElementById('programFeatureList');
+  if (!list) return;
+
+  const row = createProgramFeatureRow(value);
 
   list.appendChild(row);
   refreshProgramFeatureRows();
