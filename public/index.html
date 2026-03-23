@@ -578,7 +578,7 @@
           </div>
         </div>
         <div class="faq-chat-divider"></div>
-        <form class="faq-chat-input" onsubmit="sendFaqQuestion(event)">
+        <form class="faq-chat-input" onsubmit="sendFaqQuestion(event); return false;">
           <input type="text" id="faqInput" placeholder="Ask your question..." autocomplete="off">
           <button type="submit" aria-label="Send">&#10148;</button>
         </form>
