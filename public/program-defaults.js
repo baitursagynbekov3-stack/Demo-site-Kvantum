@@ -295,6 +295,55 @@
       ],
       buttonText: 'Transform',
       buttonText_ru: 'Трансформироваться',
+      detailsPrimaryAction: true,
+      detailsText: 'REBOOT — REALITY REPROGRAMMING is a systemic transformational program where you rewire your thinking, remove limiting beliefs, and step out of old scenarios. You build inner support, shift your state, and start making decisions that drive growth in money, relationships, and self-realization. This is not about motivation — it is about real change at the level of thinking, emotions, and action.',
+      detailsText_ru: 'Перезагрузка — ПЕРЕПРОГРАММИРОВАНИЕ РЕАЛЬНОСТИ — это системная трансформационная программа, где ты перепрошиваешь мышление, убираешь ограничивающие установки и выходишь из старых сценариев. Ты выстраиваешь внутреннюю опору, меняешь состояние и начинаешь принимать решения, которые приводят к росту в деньгах, отношениях и реализации. Это не про мотивацию — это про реальные изменения на уровне мышления, эмоций и действий.',
+      detailsVideos: [
+        {
+          title: 'Main transformation story',
+          subtitle: 'Video review',
+          src: '/videos/reboot-main.mp4',
+          poster: '',
+          isPrimary: true
+        },
+        {
+          title: 'Shift in decisions and money',
+          subtitle: 'Video review',
+          src: '/videos/reboot-extra-1.mp4',
+          poster: '',
+          isPrimary: false
+        },
+        {
+          title: 'Change in state and realization',
+          subtitle: 'Video review',
+          src: '/videos/reboot-extra-2.mp4',
+          poster: '',
+          isPrimary: false
+        }
+      ],
+      detailsVideos_ru: [
+        {
+          title: 'Главная история трансформации',
+          subtitle: 'Видео отзыв',
+          src: '/videos/reboot-main.mp4',
+          poster: '',
+          isPrimary: true
+        },
+        {
+          title: 'Сдвиг в решениях и деньгах',
+          subtitle: 'Видео отзыв',
+          src: '/videos/reboot-extra-1.mp4',
+          poster: '',
+          isPrimary: false
+        },
+        {
+          title: 'Изменение состояния и реализации',
+          subtitle: 'Видео отзыв',
+          src: '/videos/reboot-extra-2.mp4',
+          poster: '',
+          isPrimary: false
+        }
+      ],
       actionType: 'purchase',
       order: 4
     },
