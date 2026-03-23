@@ -2834,7 +2834,7 @@ body.dark-mode .phone-input-group .country-code-select {
   border-bottom: 1px solid var(--gray-300);
 }
 
-.dark-mode .profile-modal-header { border-color: #333; }
+body.dark-mode .profile-modal-header { border-color: #333; }
 
 .profile-avatar-lg {
   width: 64px;
@@ -2858,7 +2858,7 @@ body.dark-mode .phone-input-group .country-code-select {
   margin-bottom: 4px;
 }
 
-.dark-mode .profile-display-name { color: var(--white); }
+/* dark-mode .profile-display-name handled in consolidated block below */
 
 .profile-meta {
   font-size: 0.82rem;
@@ -2872,7 +2872,7 @@ body.dark-mode .phone-input-group .country-code-select {
   color: var(--dark);
 }
 
-.dark-mode .profile-section-title { color: var(--white); }
+/* dark-mode .profile-section-title handled in consolidated block below */
 
 .profile-password-note {
   font-size: 0.82rem;
@@ -2897,7 +2897,7 @@ body.dark-mode .phone-input-group .country-code-select {
   gap: 12px;
 }
 
-.dark-mode .profile-booking-item { background: #222; }
+/* dark-mode .profile-booking-item handled in consolidated block below */
 
 .profile-booking-info {
   display: flex;
@@ -2911,7 +2911,7 @@ body.dark-mode .phone-input-group .country-code-select {
   color: var(--dark);
 }
 
-.dark-mode .profile-booking-service { color: var(--white); }
+/* dark-mode .profile-booking-service handled in consolidated block below */
 
 .profile-booking-date {
   font-size: 0.78rem;
@@ -2970,13 +2970,28 @@ body.dark-mode .phone-input-group .country-code-select {
 .status-pending { background: #fef3c7; color: #92400e; }
 .status-cancelled { background: #f3f4f6; color: #6b7280; }
 
-/* ===== Profile dark mode fixes ===== */
-.dark-mode .profile-modal h2,
-.dark-mode .profile-modal h3 { color: #dedede; }
-.dark-mode .profile-modal .form-group label { color: #ccc; }
-.dark-mode .profile-modal .profile-password-note { color: #999; }
-.dark-mode .profile-booking-card { background: #222; }
-.dark-mode .booking-card-header strong { color: #dedede; }
-.dark-mode .booking-card-details { color: #999; }
-.dark-mode .profile-booking-date { color: #999; }
-.dark-mode .profile-no-bookings { color: #999; }
+/* ===== Profile & Purchases modal — dark mode ===== */
+body.dark-mode .profile-modal { color: #dedede; }
+body.dark-mode .profile-modal h2,
+body.dark-mode .profile-modal h3 { color: #dedede; }
+body.dark-mode .profile-modal p { color: #bbb; }
+body.dark-mode .profile-display-name { color: #fff; }
+body.dark-mode .profile-meta { color: #999; }
+body.dark-mode .profile-modal .form-group label { color: #ccc; }
+body.dark-mode .profile-modal .profile-password-note { color: #999; }
+body.dark-mode .profile-modal .profile-password-note a { color: var(--primary); }
+body.dark-mode .profile-section-title { color: #dedede; }
+body.dark-mode .profile-booking-card { background: #222; }
+body.dark-mode .booking-card-header strong { color: #dedede; }
+body.dark-mode .booking-card-details { color: #999; }
+body.dark-mode .profile-booking-service { color: #dedede; }
+body.dark-mode .profile-booking-date { color: #999; }
+body.dark-mode .profile-booking-item { background: #222; border-color: #333; }
+body.dark-mode .profile-no-bookings { color: #999; }
+body.dark-mode .status-completed { background: #064e3b; color: #6ee7b7; }
+body.dark-mode .status-pending { background: #78350f; color: #fcd34d; }
+body.dark-mode .status-cancelled { background: #1f2937; color: #9ca3af; }
+body.dark-mode .booking-status--completed { background: #064e3b; color: #6ee7b7; }
+body.dark-mode .booking-status--pending,
+body.dark-mode .booking-status--new { background: #78350f; color: #fcd34d; }
+body.dark-mode .booking-status--cancelled { background: #1f2937; color: #9ca3af; }
