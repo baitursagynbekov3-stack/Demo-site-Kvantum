@@ -353,7 +353,7 @@
         {
           text: 'I realized there are things more valuable than money, things that money cannot buy.',
           author: 'Sofia',
-          role: 'REBOOT client'
+          role: 'Reboot'
         },
         {
           text: 'I understood again that the true value is me and my life. When we allow ourselves to have what we really want, we receive it.',
@@ -370,7 +370,7 @@
         {
           text: 'Доброе утро. Я осознала, что есть вещи, которые дороже, чем деньги, и которые не покупаются деньгами.',
           author: 'София',
-          role: 'Клиентка REBOOT'
+          role: 'Перезагрузка'
         },
         {
           text: 'Алтынай, благодарю за танец и за практику. Я еще раз поняла, что ценность — это я и моя жизнь, а остальное вторично. Если мы разрешим себе иметь то, что хотим, то мы это получим. Спасибо за бесценные знания.',
