@@ -1734,6 +1734,7 @@ async function loadSiteContent() {
 
 // ===== FAQ Chat =====
 var faqChatSessionId = null;
+var faqChatBusy = false;
 
 function getFaqSessionId() {
   if (!faqChatSessionId) {
@@ -1747,7 +1748,9 @@ function addFaqMsg(text, sender) {
   if (!container) return;
   var div = document.createElement('div');
   div.className = 'faq-msg ' + sender;
-  div.innerHTML = '<div class="faq-msg-bubble">' + escapeHtml(text) + '</div>';
+  // Preserve line breaks from bot responses
+  var html = escapeHtml(text);
+  div.innerHTML = '<div class="faq-msg-bubble">' + html + '</div>';
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }
@@ -1769,12 +1772,23 @@ function removeFaqTyping(id) {
   if (el) el.remove();
 }
 
+function setFaqInputEnabled(enabled) {
+  var input = document.getElementById('faqInput');
+  var btn = input ? input.parentElement.querySelector('button') : null;
+  if (input) { input.disabled = !enabled; }
+  if (btn) { btn.disabled = !enabled; btn.style.opacity = enabled ? '1' : '0.4'; }
+}
+
 async function sendFaqQuestion(e) {
-  e.preventDefault();
+  if (e && e.preventDefault) e.preventDefault();
+  if (faqChatBusy) return;
+
   var input = document.getElementById('faqInput');
   var message = input.value.trim();
   if (!message) return;
 
+  faqChatBusy = true;
+  setFaqInputEnabled(false);
   addFaqMsg(message, 'user');
   input.value = '';
 
@@ -1791,14 +1805,25 @@ async function sendFaqQuestion(e) {
 
     if (!res.ok) {
       addFaqMsg(result.error || 'Sorry, something went wrong. Please try again.', 'bot');
-      return;
-    }
+    } else {
+      addFaqMsg(result.reply || '...', 'bot');
 
-    addFaqMsg(result.reply || '...', 'bot');
+      // Handle booking creation from chat
+      if (result.booking && result.booking.id) {
+        var toastMsg = currentLang === 'ru'
+          ? 'Заявка #' + result.booking.id + ' создана. Мы скоро свяжемся с вами.'
+          : 'Booking #' + result.booking.id + ' created. We will contact you shortly.';
+        showToast(toastMsg, 'success');
+      }
+    }
   } catch (err) {
     removeFaqTyping(typingId);
     addFaqMsg('Sorry, I couldn\'t connect. Please try again in a moment.', 'bot');
   }
+
+  faqChatBusy = false;
+  setFaqInputEnabled(true);
+  input.focus();
 }
 
 function renderTestimonials(items) {
