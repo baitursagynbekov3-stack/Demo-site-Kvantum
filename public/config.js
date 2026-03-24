@@ -35,6 +35,10 @@
   // Example: 1234567890-abc123def456.apps.googleusercontent.com
   window.QUANTUM_GOOGLE_CLIENT_ID = '145410914930-2n3ccc2otdud4hds5ob54fu7utubonl3.apps.googleusercontent.com';
 
+  // Stripe publishable key (public, safe to embed in frontend).
+  // Set this to your Stripe publishable key (pk_live_... or pk_test_...).
+  window.QUANTUM_STRIPE_PUBLISHABLE_KEY = '';
+
   // Cloudflare Turnstile site key (public key for frontend widget).
   window.QUANTUM_TURNSTILE_SITE_KEY = '0x4AAAAAACp5xU0M94sIaWOg';
 

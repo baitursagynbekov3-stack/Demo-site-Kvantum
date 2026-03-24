@@ -4114,15 +4114,18 @@ async function handlePurchase(productId, productName, amount, currency) {
     checkout_type: 'stripe'
   });
 
-  showToast('Redirecting to secure checkout...', 'info');
+  showToast(currentLang === 'ru' ? 'Открываем оплату...' : 'Opening checkout...', 'info');
   try {
     const res = await apiFetch('/api/create-checkout-session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-      body: JSON.stringify({ productId, productName, amount: numericAmount, currency: normalizedCurrency })
+      body: JSON.stringify({ productId, productName, amount: numericAmount, currency: normalizedCurrency, embedded: true })
     });
     const data = await res.json();
-    if (data.url) {
+    if (data.clientSecret) {
+      await openEmbeddedCheckout(data.clientSecret);
+    } else if (data.url) {
+      // Fallback to redirect if embedded not supported
       window.location.href = data.url;
     } else {
       showToast(data.error || 'Could not start checkout. Please try again.', 'error');
@@ -4130,6 +4133,58 @@ async function handlePurchase(productId, productName, amount, currency) {
   } catch (err) {
     showToast('Could not connect to payment service. Please try again.', 'error');
   }
+}
+
+// ===== Stripe Embedded Checkout =====
+let _stripeInstance = null;
+let _embeddedCheckout = null;
+
+function getStripeInstance() {
+  if (_stripeInstance) return _stripeInstance;
+  if (typeof Stripe === 'undefined') return null;
+  const key = (window.QUANTUM_STRIPE_PUBLISHABLE_KEY || '').trim();
+  if (!key) return null;
+  _stripeInstance = Stripe(key);
+  return _stripeInstance;
+}
+
+async function openEmbeddedCheckout(clientSecret) {
+  // Ensure Stripe.js is loaded
+  if (typeof window.loadStripeIfNeeded === 'function') window.loadStripeIfNeeded();
+
+  // Wait for Stripe.js to be available (up to 5s)
+  let waited = 0;
+  while (typeof Stripe === 'undefined' && waited < 5000) {
+    await new Promise(r => setTimeout(r, 200));
+    waited += 200;
+  }
+
+  const stripeObj = getStripeInstance();
+  if (!stripeObj) {
+    showToast('Payment system not available. Please try again.', 'error');
+    return;
+  }
+
+  const mountEl = document.getElementById('stripeCheckoutMount');
+  if (!mountEl) return;
+  mountEl.innerHTML = '';
+
+  try {
+    _embeddedCheckout = await stripeObj.initEmbeddedCheckout({ clientSecret });
+    _embeddedCheckout.mount('#stripeCheckoutMount');
+    openModal('stripeCheckoutModal');
+  } catch (err) {
+    showToast('Could not open checkout. Please try again.', 'error');
+  }
+}
+
+function cancelStripeCheckout() {
+  if (_embeddedCheckout) {
+    _embeddedCheckout.destroy();
+    _embeddedCheckout = null;
+  }
+  document.getElementById('stripeCheckoutMount').innerHTML = '';
+  closeModal('stripeCheckoutModal');
 }
 
 async function handlePayment(e) {

@@ -2267,6 +2267,14 @@ body.dark-mode .phone-input-group .country-code-select {
 .remember-me-group { margin-top: 4px; margin-bottom: 0; }
 .remember-me-label { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; color: var(--gray-500); cursor: pointer; }
 .remember-me-label input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
+/* Stripe Embedded Checkout */
+.stripe-checkout-modal { max-width: 600px; width: 100%; padding: 0; overflow: hidden; }
+.stripe-checkout-modal .modal-close { position: absolute; top: 12px; right: 12px; z-index: 10; }
+#stripeCheckoutMount { min-height: 400px; }
+@media (max-width: 768px) {
+  .stripe-checkout-modal { max-width: 100%; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+}
+
 .modal-success { text-align: center; padding: 48px 40px; }
 .success-icon {
   width: 72px;

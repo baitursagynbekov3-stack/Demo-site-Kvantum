@@ -2032,7 +2032,8 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
       return res.status(400).json({ error: 'Invalid product or amount' });
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const siteUrl = process.env.SITE_URL || 'https://kvantum.us';
+    const sessionParams = {
       payment_method_types: ['card'],
       line_items: [{
         price_data: {
@@ -2043,8 +2044,6 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
         quantity: 1
       }],
       mode: 'payment',
-      success_url: `${process.env.SITE_URL || 'https://kvantum.us'}/?payment=success&sid={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.SITE_URL || 'https://kvantum.us'}/?payment=cancelled`,
       customer_email: req.user.email,
       metadata: {
         productId: String(productId || ''),
@@ -2058,8 +2057,20 @@ app.post('/api/create-checkout-session', authenticateToken, async (req, res) => 
         userEmail: req.user.email,
         userName: req.user.name
       }
-    });
-    res.json({ url: session.url });
+    };
+
+    // Embedded checkout (user stays on site) vs redirect (fallback)
+    if (req.body.embedded) {
+      sessionParams.ui_mode = 'embedded';
+      sessionParams.return_url = `${siteUrl}/?payment=success&sid={CHECKOUT_SESSION_ID}`;
+      const session = await stripe.checkout.sessions.create(sessionParams);
+      res.json({ clientSecret: session.client_secret });
+    } else {
+      sessionParams.success_url = `${siteUrl}/?payment=success&sid={CHECKOUT_SESSION_ID}`;
+      sessionParams.cancel_url = `${siteUrl}/?payment=cancelled`;
+      const session = await stripe.checkout.sessions.create(sessionParams);
+      res.json({ url: session.url });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

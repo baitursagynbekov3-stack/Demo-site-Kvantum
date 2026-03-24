@@ -982,6 +982,14 @@
     </div>
   </div>
 
+  <!-- Stripe Embedded Checkout Modal -->
+  <div class="modal-overlay" id="stripeCheckoutModal">
+    <div class="modal stripe-checkout-modal">
+      <button class="modal-close" onclick="cancelStripeCheckout()">&times;</button>
+      <div id="stripeCheckoutMount"></div>
+    </div>
+  </div>
+
   <!-- Program Details Modal -->
   <div class="modal-overlay" id="programDetailsModal">
     <div class="modal program-details-modal">
@@ -1108,6 +1116,8 @@
             window.trackAnalyticsEvent('payment_success', { source: 'stripe_return' });
           }
           window.history.replaceState({}, '', window.location.pathname);
+          // Close embedded checkout modal if open
+          if (typeof cancelStripeCheckout === 'function') cancelStripeCheckout();
           setTimeout(function() { showToast('Payment successful! Thank you for your purchase.', 'success'); }, 500);
         } else if (params.get('payment') === 'cancelled') {
           if (window.handleStripeReturnStatus) {
