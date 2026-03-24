@@ -1784,6 +1784,30 @@ function setFaqInputEnabled(enabled) {
   if (btn) { btn.disabled = !enabled; btn.style.opacity = enabled ? '1' : '0.4'; }
 }
 
+// Local fallback answers when API is unreachable
+var faqLocalAnswers = [
+  { keywords: ['нлп', 'nlp', 'что такое'], answer: 'НЛП — это набор практических техник, которые помогают управлять мышлением, состоянием и поведением, улучшать коммуникацию и быстрее достигать целей.' },
+  { keywords: ['результат', 'получу', 'results'], answer: 'Вы научитесь лучше понимать людей, уверенно общаться, управлять эмоциями и быстрее достигать желаемых результатов в жизни и работе.' },
+  { keywords: ['новичок', 'опыт', 'начинающ', 'beginner', 'experience'], answer: 'Да, программа подходит для начинающих. Всё объясняется простым языком и сразу применяется на практике.' },
+  { keywords: ['теория', 'практика', 'theory', 'practice'], answer: 'Основной упор сделан на практику. Вы сразу применяете техники в реальной жизни.' },
+  { keywords: ['когда', 'увижу', 'скоро', 'when', 'how long'], answer: 'Первые изменения заметны уже в процессе обучения, а устойчивый результат формируется при регулярной практике.' },
+  { keywords: ['цена', 'стоимость', 'сколько', 'price', 'cost'], answer: 'Зарядка мозга — 1 000 сом, Клуб Ресурсы — 5 000 сом/мес, Интенсив «Папа, Мама» — $300, REBOOT — $1 000, Наставничество — уточняйте у менеджеров.' },
+  { keywords: ['консультац', 'бесплатн', 'consultation', 'free'], answer: 'Да, первичная консультация полностью бесплатная. Запишитесь через форму выше или напишите нам в WhatsApp/Telegram.' },
+  { keywords: ['зарядка', 'brain charge', 'мозг'], answer: 'Зарядка мозга — 21-дневная программа начального уровня. 15 минут в день, сессии в 6:00 утра (время КР). Стоимость: 1 000 сом.' },
+  { keywords: ['привет', 'здравствуй', 'hello', 'hi'], answer: 'Здравствуйте! Рада вас видеть. Чем могу помочь? Спросите о программах, ценах или запишитесь на бесплатную консультацию.' }
+];
+
+function getFaqLocalAnswer(msg) {
+  var lower = msg.toLowerCase();
+  for (var i = 0; i < faqLocalAnswers.length; i++) {
+    var kws = faqLocalAnswers[i].keywords;
+    for (var j = 0; j < kws.length; j++) {
+      if (lower.indexOf(kws[j]) !== -1) return faqLocalAnswers[i].answer;
+    }
+  }
+  return 'Спасибо за вопрос! Для подробного ответа запишитесь на бесплатную консультацию — наш специалист свяжется с вами. Заполните форму выше или напишите нам в WhatsApp.';
+}
+
 function sendFaqQuestion() {
   if (faqChatBusy) return;
 
@@ -1810,20 +1834,20 @@ function sendFaqQuestion() {
   .then(function(result) {
     removeFaqTyping(typingId);
     if (!result.ok) {
-      addFaqMsg(result.data.error || 'Sorry, something went wrong. Please try again.', 'bot');
+      // API returned error — use local fallback
+      addFaqMsg(getFaqLocalAnswer(message), 'bot');
     } else {
       addFaqMsg(result.data.reply || '...', 'bot');
       if (result.data.booking && result.data.booking.id) {
-        var toastMsg = currentLang === 'ru'
-          ? 'Заявка #' + result.data.booking.id + ' создана. Мы скоро свяжемся с вами.'
-          : 'Booking #' + result.data.booking.id + ' created. We will contact you shortly.';
+        var toastMsg = 'Заявка #' + result.data.booking.id + ' создана. Мы скоро свяжемся с вами.';
         if (typeof showToast === 'function') showToast(toastMsg, 'success');
       }
     }
   })
-  .catch(function(err) {
+  .catch(function() {
+    // Network error — use local fallback
     removeFaqTyping(typingId);
-    addFaqMsg('Sorry, I couldn\'t connect. Please try again in a moment.', 'bot');
+    addFaqMsg(getFaqLocalAnswer(message), 'bot');
   })
   .finally(function() {
     faqChatBusy = false;
