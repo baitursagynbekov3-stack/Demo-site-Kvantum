@@ -34,6 +34,8 @@ const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || '').trim();
 const OPENAI_MODEL = (process.env.OPENAI_MODEL || 'gpt-4o-mini').trim();
 const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
 const TELEGRAM_CHAT_ID = (process.env.TELEGRAM_CHAT_ID || '').trim();
+const TELEGRAM_PURCHASE_BOT_TOKEN = (process.env.TELEGRAM_PURCHASE_BOT_TOKEN || '').trim();
+const TELEGRAM_PURCHASE_CHAT_ID = (process.env.TELEGRAM_PURCHASE_CHAT_ID || process.env.TELEGRAM_CHAT_ID || '').trim();
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
 const RESEND_FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || 'noreply@kvantum.us').trim();
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
@@ -212,27 +214,38 @@ app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, 
           }
         });
 
-        // Notify n8n of new purchase for Telegram notification
+        // Send purchase notification via dedicated purchase Telegram bot
+        const purchaseBotToken = TELEGRAM_PURCHASE_BOT_TOKEN || TELEGRAM_BOT_TOKEN;
+        const purchaseChatId = TELEGRAM_PURCHASE_CHAT_ID;
+        if (purchaseBotToken && purchaseChatId) {
+          const purchaseAmount = Number.isFinite(normalizedOriginalAmount) && normalizedOriginalAmount > 0
+            ? normalizedOriginalAmount : session.amount_total / 100;
+          const purchaseCurr = normalizedOriginalCurrency || session.currency.toUpperCase();
+          const msg = `💰 *Новая покупка!*\n\n👤 ${user.name}\n📧 ${user.email}\n📦 ${productName || 'Unknown'}\n💵 ${purchaseAmount} ${purchaseCurr}\n🕐 ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Bishkek' })}`;
+          fetch(`https://api.telegram.org/bot${purchaseBotToken}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: purchaseChatId, text: msg, parse_mode: 'Markdown' })
+          }).catch(err => console.error('[telegram purchase bot] failed:', err.message));
+        }
+
+        // Notify n8n of new purchase (backup/automation)
         if (process.env.N8N_PURCHASE_WEBHOOK_URL) {
-          try {
-            await fetch(process.env.N8N_PURCHASE_WEBHOOK_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerName: user.name,
-                customerEmail: user.email,
-                productName: productName || 'Unknown product',
-                productId: productId || null,
-                amount: Number.isFinite(normalizedOriginalAmount) && normalizedOriginalAmount > 0
-                  ? normalizedOriginalAmount
-                  : session.amount_total / 100,
-                currency: normalizedOriginalCurrency || session.currency.toUpperCase(),
-                timestamp: new Date().toISOString()
-              })
-            });
-          } catch (err) {
-            console.error('[n8n purchase webhook] failed:', err.message);
-          }
+          fetch(process.env.N8N_PURCHASE_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerName: user.name,
+              customerEmail: user.email,
+              productName: productName || 'Unknown product',
+              productId: productId || null,
+              amount: Number.isFinite(normalizedOriginalAmount) && normalizedOriginalAmount > 0
+                ? normalizedOriginalAmount
+                : session.amount_total / 100,
+              currency: normalizedOriginalCurrency || session.currency.toUpperCase(),
+              timestamp: new Date().toISOString()
+            })
+          }).catch(err => console.error('[n8n purchase webhook] failed:', err.message));
         }
       }
     } catch (err) {
